@@ -1,4 +1,4 @@
-import sqlite3, os, secrets, smtplib
+import sqlite3, os, secrets, smtplib, socket, contextlib
 from datetime import datetime
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -131,6 +131,23 @@ def saldo_pendiente(conn, solicitud):
 
 
 # --------------------------------------------------------------------------- Correo
+@contextlib.contextmanager
+def _forzar_ipv4():
+    """Algunos hosts (ej. plan gratuito de Render) no tienen salida IPv6 y
+    fallan con 'Network is unreachable' al resolver smtp.gmail.com vía AAAA.
+    Forzamos getaddrinfo a devolver solo direcciones IPv4 durante el envío."""
+    original = socket.getaddrinfo
+
+    def solo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+        return original(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = solo_ipv4
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
 def enviar_correo(destinatario, asunto, cuerpo):
     if not destinatario:
         return False, "El cliente no registró un correo electrónico."
@@ -146,10 +163,17 @@ def enviar_correo(destinatario, asunto, cuerpo):
         msg["Subject"] = asunto
         msg["From"] = remitente
         msg["To"] = destinatario
-        with smtplib.SMTP(host, int(port), timeout=15) as server:
-            server.starttls()
-            server.login(user, password)
-            server.sendmail(remitente, [destinatario], msg.as_string())
+        port_int = int(port)
+        with _forzar_ipv4():
+            if port_int == 465:
+                server = smtplib.SMTP_SSL(host, port_int, timeout=15)
+            else:
+                server = smtplib.SMTP(host, port_int, timeout=15)
+            with server:
+                if port_int != 465:
+                    server.starttls()
+                server.login(user, password)
+                server.sendmail(remitente, [destinatario], msg.as_string())
         return True, "Correo enviado correctamente."
     except Exception as exc:
         return False, f"No se pudo enviar el correo: {exc}"
