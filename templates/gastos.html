@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Gastos administrativos{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'gastos' %}
+
+<div class="cards">
+  <div class="card stat"><div class="label">Total gastos administrativos</div><div class="value red">{{ total_gastos | money }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Registrar nuevo gasto</h2>
+  <form method="POST" action="{{ url_for('admin_gastos_nuevo') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div style="flex:2; min-width:200px;">
+        <label>Concepto</label>
+        <input type="text" name="concepto" placeholder="Ej: Transporte, papelería, arriendo..." required>
+      </div>
+      <div style="min-width:140px;">
+        <label>Monto</label>
+        <input type="number" name="monto" min="0" step="1000" required>
+      </div>
+      <div style="min-width:160px;">
+        <label>Fecha</label>
+        <input type="date" name="fecha">
+      </div>
+    </div>
+    <button type="submit">Registrar gasto</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Historial de gastos</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Registrado en</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for g in gastos %}
+      <tr>
+        <td>{{ g.fecha }}</td>
+        <td>{{ g.concepto }}</td>
+        <td>{{ g.monto | money }}</td>
+        <td>{{ g.creado_en }}</td>
+        <td>
+          <form class="inline" method="POST" action="{{ url_for('admin_gastos_eliminar', gid=g.id) }}" onsubmit="return confirm('¿Eliminar este gasto?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="danger">Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No hay gastos registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

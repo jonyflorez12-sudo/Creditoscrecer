@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Cambiar contraseña{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'clave' %}
+
+<div class="card" style="max-width:420px;">
+  <h2>Cambiar contraseña de administrador</h2>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label>Contraseña actual</label>
+    <input type="password" name="actual" required>
+
+    <label>Nueva contraseña (mínimo 6 caracteres)</label>
+    <input type="password" name="nueva" minlength="6" required>
+
+    <label>Confirmar nueva contraseña</label>
+    <input type="password" name="confirmar" minlength="6" required>
+
+    <button type="submit">Actualizar contraseña</button>
+  </form>
+</div>
+{% endblock %}

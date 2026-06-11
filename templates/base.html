@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Préstamos{% endblock %}</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#16213a; --card2:#1f2c4a; --accent:#7dd13b;
+    --accent2:#1f6fd6; --green:#22c55e; --red:#ef4444; --yellow:#facc15; --text:#e8edf7; --muted:#93a0bd;
+  }
+  *{box-sizing:border-box; font-family:'Segoe UI',Arial,sans-serif;}
+  body{margin:0; background:var(--bg); color:var(--text);}
+  header{padding:14px 32px; background:linear-gradient(135deg,#101b33,#0b1220); border-bottom:1px solid #243152; display:flex; justify-content:space-between; align-items:center;}
+  header .brand{display:flex; align-items:center; gap:14px;}
+  header .brand img{height:54px; border-radius:8px;}
+  header h1{margin:0; font-size:22px; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  header .tag{margin:0; font-size:12px; color:var(--muted); letter-spacing:1px;}
+  header a{color:var(--accent); text-decoration:none; font-size:14px; font-weight:600;}
+  nav.admin-nav{display:flex; gap:18px; align-items:center; flex-wrap:wrap;}
+  nav.admin-nav a{color:var(--text); opacity:.85;}
+  nav.admin-nav a:hover, nav.admin-nav a.active{color:var(--accent); opacity:1;}
+  nav.admin-nav button{margin:0; padding:8px 16px; font-size:13px; background:var(--card2); color:var(--red);}
+  .container{padding:24px 32px; max-width:1100px; margin:0 auto;}
+  .card{background:var(--card); border-radius:12px; padding:24px; box-shadow:0 4px 12px rgba(0,0,0,.3); margin-bottom:20px;}
+  label{display:block; margin:12px 0 4px; font-size:14px; color:var(--muted);}
+  input, select, textarea{width:100%; background:var(--card2); border:1px solid #334155; color:var(--text); padding:10px 12px; border-radius:8px; font-size:14px;}
+  button{margin-top:18px; background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#0b1220; border:none; padding:12px 22px; border-radius:8px; font-weight:700; font-size:15px; cursor:pointer;}
+  button.secondary{background:var(--card2); color:var(--text);}
+  button.danger{background:var(--red); color:#fff;}
+  .flash{background:rgba(239,68,68,.15); color:var(--red); padding:10px 14px; border-radius:8px; margin-bottom:14px;}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; margin-bottom:24px;}
+  .stat .label{color:var(--muted); font-size:13px; text-transform:uppercase;}
+  .stat .value{font-size:24px; font-weight:700; margin-top:6px;}
+  .value.green{color:var(--green);} .value.red{color:var(--red);} .value.accent{color:var(--accent);} .value.yellow{color:var(--yellow);}
+  table{width:100%; border-collapse:collapse;}
+  th, td{padding:10px; text-align:left; font-size:13px; border-bottom:1px solid #334155; vertical-align:top;}
+  th{background:var(--card2);}
+  .badge{padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600;}
+  .badge.viable{background:rgba(34,197,94,.15); color:var(--green);}
+  .badge.no-viable{background:rgba(239,68,68,.15); color:var(--red);}
+  .badge.Pendiente{background:rgba(250,204,21,.15); color:var(--yellow);}
+  .badge.Aprobado{background:rgba(34,197,94,.15); color:var(--green);}
+  .badge.Rechazado{background:rgba(239,68,68,.15); color:var(--red);}
+  .table-wrap{overflow-x:auto;}
+  form.inline{display:inline; margin:0;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .row select, .row input{width:auto;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="{{ url_for('static', filename='img/image13.jpeg') }}" alt="Créditos Crecer">
+    <div>
+      <h1>Créditos Crecer</h1>
+      <p class="tag">CONFIANZA · SEGURIDAD · RÁPIDO Y FÁCIL</p>
+    </div>
+  </div>
+  {% block nav %}{% endblock %}
+</header>
+<div class="container">
+{% with messages = get_flashed_messages() %}
+  {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+{% endwith %}
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

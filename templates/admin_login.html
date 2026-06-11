@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Acceso administrador{% endblock %}
+{% block nav %}<a href="{{ url_for('registro') }}">Página de registro</a>{% endblock %}
+{% block content %}
+<div class="card" style="max-width:380px; margin:40px auto;">
+  <h2>Acceso administrador</h2>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Contraseña</label>
+    <input type="password" name="password" required autofocus>
+    <button type="submit">Ingresar</button>
+  </form>
+</div>
+{% endblock %}

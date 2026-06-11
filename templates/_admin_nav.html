@@ -1,0 +1,11 @@
+<nav class="admin-nav">
+  <a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if active=='dashboard' }}">Solicitudes</a>
+  <a href="{{ url_for('admin_gastos') }}" class="{{ 'active' if active=='gastos' }}">Gastos</a>
+  <a href="{{ url_for('admin_exportar') }}">Exportar Excel</a>
+  <a href="{{ url_for('admin_configuracion') }}" class="{{ 'active' if active=='config' }}">Correo (SMTP)</a>
+  <a href="{{ url_for('admin_clave') }}" class="{{ 'active' if active=='clave' }}">Cambiar clave</a>
+  <form method="POST" action="{{ url_for('admin_logout') }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Cerrar sesión</button>
+  </form>
+</nav>

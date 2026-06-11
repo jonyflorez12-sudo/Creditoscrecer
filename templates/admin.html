@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Panel administrador{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'dashboard' %}
+
+<div class="cards">
+  <div class="card stat"><div class="label">Solicitudes</div><div class="value accent">{{ total }}</div></div>
+  <div class="card stat"><div class="label">Viables</div><div class="value green">{{ viables }}</div></div>
+  <div class="card stat"><div class="label">Pendientes</div><div class="value yellow">{{ pendientes }}</div></div>
+  <div class="card stat"><div class="label">Aprobados</div><div class="value green">{{ aprobados }}</div></div>
+  <div class="card stat"><div class="label">Prestado (aprobados)</div><div class="value accent">{{ total_prestado | money }}</div></div>
+  <div class="card stat"><div class="label">Por cobrar</div><div class="value yellow">{{ total_por_cobrar | money }}</div></div>
+  <div class="card stat"><div class="label">Total abonado</div><div class="value green">{{ total_abonado | money }}</div></div>
+  <div class="card stat"><div class="label">Gastos administrativos</div><div class="value red">{{ total_gastos | money }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Solicitudes</h2>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Cliente</th><th>Cédula</th><th>Contacto</th><th>Dirección</th>
+        <th>Ingreso mensual</th><th>Monto</th><th>Cuotas</th><th>Cuota semanal</th>
+        <th>Total a pagar</th><th>Abonado</th><th>Saldo</th>
+        <th>Viabilidad</th><th>Estado / Aprobar</th><th>Visita</th><th>Registrar abono</th><th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in solicitudes %}
+      <tr>
+        <td>{{ s.nombre }}</td>
+        <td>{{ s.cedula }}</td>
+        <td>{{ s.telefono }}<br><span style="color:var(--muted)">{{ s.correo or 'sin correo' }}</span></td>
+        <td>{{ s.direccion }}</td>
+        <td>{{ s.ingreso_mensual | money }}</td>
+        <td>{{ s.monto_solicitado | money }}</td>
+        <td>{{ s.num_cuotas }}</td>
+        <td>{{ s.cuota_estimada | money }}</td>
+        <td>{{ s.total_a_pagar | money }}</td>
+        <td>{{ s.abonado | money }}</td>
+        <td>{{ s.saldo | money }}</td>
+        <td>
+          {% if s.viable %}<span class="badge viable">Viable</span>
+          {% else %}<span class="badge no-viable">No viable</span>{% endif %}
+        </td>
+        <td>
+          <span class="badge {{ s.estado }}">{{ s.estado }}</span>
+          <form class="inline row" method="POST" action="{{ url_for('admin_estado', sid=s.id) }}" style="margin-top:6px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="estado" onchange="this.form.submit()">
+              <option value="Pendiente" {% if s.estado=='Pendiente' %}selected{% endif %}>Pendiente</option>
+              <option value="Rechazado" {% if s.estado=='Rechazado' %}selected{% endif %}>Rechazado</option>
+              <option value="Aprobado" {% if s.estado=='Aprobado' %}selected{% endif %} disabled>Aprobado</option>
+            </select>
+          </form>
+          {% if s.estado != 'Aprobado' %}
+          <form class="inline row" method="POST" action="{{ url_for('admin_aprobar', sid=s.id) }}" style="margin-top:6px;" title="Aprueba con un monto y N° de cuotas distintos al solicitado si es necesario">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="number" name="monto_aprobado" placeholder="Monto a aprobar" min="0" step="1000" value="{{ s.monto_solicitado | int }}" style="width:110px">
+            <input type="number" name="num_cuotas_aprobadas" placeholder="Cuotas" min="1" max="52" value="{{ s.num_cuotas }}" style="width:60px">
+            <button type="submit" class="secondary">Aprobar</button>
+          </form>
+          {% else %}
+          <div style="margin-top:6px; color:var(--muted); font-size:12px;">
+            Aprobado: {{ s.monto_aprobado | money }} / {{ s.num_cuotas }} cuotas
+          </div>
+          {% endif %}
+        </td>
+        <td>
+          <form class="inline row" method="POST" action="{{ url_for('admin_visita', sid=s.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="date" name="fecha_visita" value="{{ s.fecha_visita or '' }}">
+            <input type="text" name="notas" placeholder="Notas" value="{{ s.notas or '' }}" style="width:120px">
+            <button type="submit" class="secondary">Guardar</button>
+          </form>
+        </td>
+        <td>
+          <form class="inline row" method="POST" action="{{ url_for('admin_pago', sid=s.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="number" name="monto" placeholder="Valor" min="0" step="1000" required style="width:90px">
+            <input type="date" name="fecha" value="" style="width:130px">
+            <button type="submit" class="secondary">Abonar</button>
+          </form>
+        </td>
+        <td>
+          <form class="inline" method="POST" action="{{ url_for('admin_eliminar', sid=s.id) }}" onsubmit="return confirm('¿Eliminar esta solicitud?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="danger">Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="16">Aún no hay solicitudes registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

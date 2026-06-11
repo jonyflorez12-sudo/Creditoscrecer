@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Solicitud de Préstamo{% endblock %}
+{% block nav %}<a href="{{ url_for('admin_login') }}">Acceso administrador</a>{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Registro de solicitud de préstamo</h2>
+  <p style="color:var(--muted)">Completa tus datos. Te contactaremos para confirmar la viabilidad y agendar una visita.</p>
+  <form method="POST" action="{{ url_for('registro_post') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nombre completo</label>
+    <input type="text" name="nombre" required>
+
+    <label>Cédula</label>
+    <input type="text" name="cedula" required>
+
+    <label>Teléfono</label>
+    <input type="text" name="telefono" required>
+
+    <label>Correo electrónico</label>
+    <input type="email" name="correo" placeholder="para enviarte notificaciones de tu préstamo" required>
+
+    <label>Dirección</label>
+    <input type="text" name="direccion" required>
+
+    <label>Ingreso mensual ($)</label>
+    <input type="number" name="ingreso_mensual" min="0" step="1000" required>
+
+    <label>Monto solicitado ($)</label>
+    <input type="number" name="monto_solicitado" min="0" step="1000" required>
+
+    <label>Número de cuotas semanales</label>
+    <input type="number" name="num_cuotas" min="1" max="52" value="7" required>
+
+    <p style="color:var(--muted); font-size:13px; margin-top:14px;">
+      Recuerda: por cada $1.000.000 prestado se pagan $1.200.000 en total
+      (interés del 20%), distribuidos en cuotas semanales iguales.
+    </p>
+
+    <button type="submit">Enviar solicitud</button>
+  </form>
+</div>
+{% endblock %}

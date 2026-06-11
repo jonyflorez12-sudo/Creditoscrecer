@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Configuración de correo{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'config' %}
+
+<div class="card" style="max-width:520px;">
+  <h2>Configuración de correo (SMTP)</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Estos datos se usan para enviar automáticamente los correos de aprobación de
+    préstamo y confirmación de abonos a los clientes. Si usas Gmail, crea una
+    "contraseña de aplicación" en tu cuenta de Google y úsala aquí (no tu clave normal).
+  </p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label>Servidor SMTP</label>
+    <input type="text" name="smtp_host" placeholder="smtp.gmail.com" value="{{ config.smtp_host }}">
+
+    <label>Puerto</label>
+    <input type="text" name="smtp_port" placeholder="587" value="{{ config.smtp_port }}">
+
+    <label>Usuario / correo remitente</label>
+    <input type="text" name="smtp_user" placeholder="creditoscrecer@gmail.com" value="{{ config.smtp_user }}">
+
+    <label>Contraseña {% if config.smtp_password_set %}(ya configurada — déjala vacía para no cambiarla){% endif %}</label>
+    <input type="password" name="smtp_password" placeholder="{{ '••••••••' if config.smtp_password_set else '' }}">
+
+    <label>Nombre/correo que verá el cliente como remitente</label>
+    <input type="text" name="smtp_from" placeholder="Créditos Crecer <creditoscrecer@gmail.com>" value="{{ config.smtp_from }}">
+
+    <button type="submit">Guardar configuración</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:520px;">
+  <h2>Probar envío de correo</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Guarda primero la configuración de arriba y luego envía un correo de prueba
+    para verificar que todo funcione.
+  </p>
+  <form method="POST" action="{{ url_for('admin_configuracion_probar') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Enviar correo de prueba a</label>
+    <input type="email" name="correo_prueba" placeholder="tu_correo@ejemplo.com" required>
+    <button type="submit" class="secondary">Enviar prueba</button>
+  </form>
+</div>
+{% endblock %}
