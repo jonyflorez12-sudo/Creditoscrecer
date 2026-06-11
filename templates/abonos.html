@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Abonos de {{ s.nombre }}{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'dashboard' %}
+
+<p><a href="{{ url_for('admin_dashboard') }}">&larr; Volver a solicitudes</a></p>
+
+<div class="cards">
+  <div class="card stat"><div class="label">Cliente</div><div class="value accent" style="font-size:18px;">{{ s.nombre }}</div></div>
+  <div class="card stat"><div class="label">Total a pagar</div><div class="value">{{ s.total_a_pagar | money }}</div></div>
+  <div class="card stat"><div class="label">Total abonado</div><div class="value green">{{ abonado | money }}</div></div>
+  <div class="card stat"><div class="label">Saldo pendiente</div><div class="value {{ 'yellow' if saldo > 0 else 'green' }}">{{ saldo | money }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Registrar nuevo abono</h2>
+  <form method="POST" action="{{ url_for('admin_pago', sid=s.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div style="min-width:140px;">
+        <label>Valor</label>
+        <input type="number" name="monto" min="0" step="1000" required>
+      </div>
+      <div style="min-width:160px;">
+        <label>Fecha</label>
+        <input type="date" name="fecha">
+      </div>
+      <div style="flex:1; min-width:180px;">
+        <label>Notas</label>
+        <input type="text" name="notas" placeholder="Opcional">
+      </div>
+    </div>
+    <button type="submit">Registrar abono</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Historial de abonos</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Si registraste un abono por error, corrige el valor/fecha o elimínalo aquí.
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Fecha</th><th>Valor</th><th>Notas</th><th>Registrado en</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for p in pagos %}
+      <tr>
+        <form method="POST" action="{{ url_for('admin_pago_editar', pid=p.id) }}" class="row" style="display:contents;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <td><input type="date" name="fecha" value="{{ p.fecha }}" style="width:140px"></td>
+          <td><input type="number" name="monto" value="{{ p.monto | int }}" min="0" step="1000" style="width:110px"></td>
+          <td><input type="text" name="notas" value="{{ p.notas or '' }}" style="width:180px"></td>
+          <td>{{ p.creado_en }}</td>
+          <td class="row">
+            <button type="submit" class="secondary">Guardar</button>
+        </form>
+            <form method="POST" action="{{ url_for('admin_pago_eliminar', pid=p.id) }}" class="inline" onsubmit="return confirm('¿Eliminar este abono?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="danger">Eliminar</button>
+            </form>
+          </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">Aún no hay abonos registrados para este préstamo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

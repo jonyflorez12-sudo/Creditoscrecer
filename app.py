@@ -434,6 +434,55 @@ def admin_pago(sid):
     return redirect(url_for("admin_dashboard"))
 
 
+# --------------------------------------------------------------------------- Historial de abonos (ver / corregir / eliminar)
+@app.route("/admin/solicitud/<int:sid>/abonos")
+def admin_abonos(sid):
+    conn = get_db()
+    s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
+    if not s:
+        conn.close()
+        abort(404)
+    pagos = conn.execute(
+        "SELECT * FROM pagos WHERE solicitud_id=? ORDER BY fecha DESC, id DESC", (sid,)
+    ).fetchall()
+    saldo, abonado = saldo_pendiente(conn, s)
+    conn.close()
+    return render_template("abonos.html", s=s, pagos=pagos, saldo=saldo, abonado=abonado)
+
+
+@app.route("/admin/pago/<int:pid>/editar", methods=["POST"])
+def admin_pago_editar(pid):
+    monto = float(request.form["monto"])
+    fecha = request.form["fecha"]
+    notas = request.form.get("notas", "")
+    conn = get_db()
+    pago = conn.execute("SELECT solicitud_id FROM pagos WHERE id=?", (pid,)).fetchone()
+    if not pago:
+        conn.close()
+        abort(404)
+    conn.execute("UPDATE pagos SET monto=?, fecha=?, notas=? WHERE id=?", (monto, fecha, notas, pid))
+    conn.commit()
+    sid = pago["solicitud_id"]
+    conn.close()
+    flash("Abono corregido.")
+    return redirect(url_for("admin_abonos", sid=sid))
+
+
+@app.route("/admin/pago/<int:pid>/eliminar", methods=["POST"])
+def admin_pago_eliminar(pid):
+    conn = get_db()
+    pago = conn.execute("SELECT solicitud_id FROM pagos WHERE id=?", (pid,)).fetchone()
+    if not pago:
+        conn.close()
+        abort(404)
+    sid = pago["solicitud_id"]
+    conn.execute("DELETE FROM pagos WHERE id=?", (pid,))
+    conn.commit()
+    conn.close()
+    flash("Abono eliminado.")
+    return redirect(url_for("admin_abonos", sid=sid))
+
+
 # --------------------------------------------------------------------------- Eliminar solicitud
 @app.route("/admin/solicitud/<int:sid>/eliminar", methods=["POST"])
 def admin_eliminar(sid):
