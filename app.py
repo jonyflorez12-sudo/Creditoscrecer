@@ -265,7 +265,7 @@ def admin_dashboard():
         d["abonado"] = abonado
         detalle.append(d)
         if s["estado"] == "Aprobado":
-            total_prestado += s["monto_solicitado"]
+            total_prestado += s["monto_aprobado"] if s["monto_aprobado"] is not None else s["monto_solicitado"]
             total_por_cobrar += saldo
         total_abonado += abonado
 

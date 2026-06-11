@@ -22,7 +22,7 @@
     <thead>
       <tr>
         <th>Cliente</th><th>Cédula</th><th>Contacto</th><th>Dirección</th>
-        <th>Ingreso mensual</th><th>Monto</th><th>Cuotas</th><th>Cuota semanal</th>
+        <th>Ingreso mensual</th><th>Monto solicitado</th><th>Monto aprobado</th><th>Cuotas</th><th>Cuota semanal</th>
         <th>Total a pagar</th><th>Abonado</th><th>Saldo</th>
         <th>Viabilidad</th><th>Estado / Aprobar</th><th>Visita</th><th>Registrar abono</th><th>Acciones</th>
       </tr>
@@ -36,6 +36,7 @@
         <td>{{ s.direccion }}</td>
         <td>{{ s.ingreso_mensual | money }}</td>
         <td>{{ s.monto_solicitado | money }}</td>
+        <td>{% if s.monto_aprobado is not none %}{{ s.monto_aprobado | money }}{% else %}—{% endif %}</td>
         <td>{{ s.num_cuotas }}</td>
         <td>{{ s.cuota_estimada | money }}</td>
         <td>{{ s.total_a_pagar | money }}</td>
