@@ -8,11 +8,5 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
-      - key: DB_PATH
-        value: /data/prestamos.db
       - key: RENDER
         value: "true"
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
