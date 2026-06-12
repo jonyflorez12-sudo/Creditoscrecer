@@ -1,5 +1,5 @@
-import sqlite3, os, secrets, smtplib, socket, contextlib
-from datetime import datetime
+import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from io import BytesIO
 
@@ -84,8 +84,20 @@ def init_db():
     cols = [c["name"] for c in conn.execute("PRAGMA table_info(solicitudes)").fetchall()]
     if "monto_aprobado" not in cols:
         conn.execute("ALTER TABLE solicitudes ADD COLUMN monto_aprobado REAL")
+    if "puntaje" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN puntaje INTEGER NOT NULL DEFAULT 400")
+    if "clave_hash" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN clave_hash TEXT")
+    if "fecha_aprobacion" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN fecha_aprobacion TEXT")
 
-    for clave in ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"):
+    # genera clave de acceso (cédula) para clientes que ya existían sin clave_hash
+    sin_clave = conn.execute("SELECT id, cedula FROM solicitudes WHERE clave_hash IS NULL").fetchall()
+    for row in sin_clave:
+        conn.execute("UPDATE solicitudes SET clave_hash=? WHERE id=?",
+                      (generate_password_hash(row["cedula"]), row["id"]))
+
+    for clave in ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from", "brevo_api_key"):
         row = conn.execute("SELECT valor FROM settings WHERE clave=?", (clave,)).fetchone()
         if not row:
             conn.execute("INSERT INTO settings (clave, valor) VALUES (?, ?)", (clave, ""))
@@ -130,6 +142,90 @@ def saldo_pendiente(conn, solicitud):
     return round(solicitud["total_a_pagar"] - abonado, 2), round(abonado, 2)
 
 
+PUNTAJE_MIN, PUNTAJE_MAX, PUNTAJE_INICIAL = 300, 850, 400
+
+
+def estado_cuenta(solicitud, pagos):
+    """Genera el plan de pagos semanal y marca en rojo ('atrasada') las cuotas
+    cuyo vencimiento ya pasó hace más de 1 semana y aún no están cubiertas
+    por el total abonado hasta la fecha."""
+    cuotas = []
+    if solicitud["estado"] != "Aprobado" or not solicitud["fecha_aprobacion"]:
+        return cuotas
+
+    fecha_base = datetime.strptime(solicitud["fecha_aprobacion"], "%Y-%m-%d")
+    abonado_total = sum(p["monto"] for p in pagos)
+    hoy = datetime.now()
+
+    acumulado_esperado = 0
+    for n in range(1, solicitud["num_cuotas"] + 1):
+        vencimiento = fecha_base + timedelta(weeks=n)
+        acumulado_esperado += solicitud["cuota_estimada"]
+        if abonado_total >= acumulado_esperado - 0.01:
+            estado = "Pagada"
+        elif hoy > vencimiento:
+            dias_atraso = (hoy - vencimiento).days
+            estado = "Atrasada" if dias_atraso > 7 else "Pendiente"
+        else:
+            estado = "Pendiente"
+        cuotas.append({
+            "numero": n,
+            "vencimiento": vencimiento.strftime("%Y-%m-%d"),
+            "monto": round(solicitud["cuota_estimada"], 2),
+            "estado": estado,
+            "atrasada": estado == "Atrasada",
+        })
+    return cuotas
+
+
+def recalcular_puntaje(conn, sid):
+    """Ajusta el puntaje crediticio (estilo datacrédito, 300-850, inicia en 400)
+    según la puntualidad de los abonos frente a las cuotas semanales."""
+    s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
+    if s["estado"] != "Aprobado" or not s["fecha_aprobacion"]:
+        return
+    pagos = conn.execute(
+        "SELECT * FROM pagos WHERE solicitud_id=? ORDER BY fecha ASC, id ASC", (sid,)
+    ).fetchall()
+
+    puntaje = PUNTAJE_INICIAL
+    fecha_base = datetime.strptime(s["fecha_aprobacion"], "%Y-%m-%d")
+    acumulado_esperado = 0
+    acumulado_pagado = 0
+    for n in range(1, s["num_cuotas"] + 1):
+        vencimiento = fecha_base + timedelta(weeks=n)
+        acumulado_esperado += s["cuota_estimada"]
+        acumulado_pagado = sum(
+            p["monto"] for p in pagos if datetime.strptime(p["fecha"], "%Y-%m-%d") <= vencimiento
+        )
+        if vencimiento > datetime.now():
+            continue  # cuota aún no vence, no afecta el puntaje todavía
+        if acumulado_pagado >= acumulado_esperado - 0.01:
+            puntaje += 10  # pago puntual
+        else:
+            puntaje -= 15  # cuota atrasada
+
+    puntaje = max(PUNTAJE_MIN, min(PUNTAJE_MAX, puntaje))
+    conn.execute("UPDATE solicitudes SET puntaje=? WHERE id=?", (puntaje, sid))
+    conn.commit()
+
+
+def analisis_aumento(solicitud):
+    """Sugiere si el cliente es elegible para un aumento de crédito según su puntaje."""
+    if solicitud["estado"] != "Aprobado":
+        return None
+    puntaje = solicitud["puntaje"]
+    monto_actual = solicitud["monto_aprobado"] or solicitud["monto_solicitado"]
+    if puntaje >= 600:
+        return {"elegible": True, "monto_sugerido": round(monto_actual * 1.5, -3),
+                "mensaje": "Excelente historial de pago. Cliente elegible para aumento de crédito de hasta 50%."}
+    if puntaje >= 500:
+        return {"elegible": True, "monto_sugerido": round(monto_actual * 1.25, -3),
+                "mensaje": "Buen historial de pago. Cliente elegible para aumento de crédito de hasta 25%."}
+    return {"elegible": False, "monto_sugerido": monto_actual,
+            "mensaje": "Aún no cumple los requisitos para un aumento de crédito."}
+
+
 # --------------------------------------------------------------------------- Correo
 @contextlib.contextmanager
 def _forzar_ipv4():
@@ -148,16 +244,47 @@ def _forzar_ipv4():
         socket.getaddrinfo = original
 
 
+def _enviar_correo_brevo(destinatario, asunto, cuerpo):
+    """Envía el correo vía la API HTTP de Brevo (puerto 443), que funciona en
+    hosts gratuitos como Render donde los puertos SMTP salientes están bloqueados."""
+    api_key = get_setting("brevo_api_key")
+    remitente = get_setting("smtp_from") or get_setting("smtp_user")
+    if not (api_key and remitente):
+        return None  # no configurado, intenta el siguiente método
+    data = json.dumps({
+        "sender": {"email": remitente, "name": "Créditos Crecer"},
+        "to": [{"email": destinatario}],
+        "subject": asunto,
+        "textContent": cuerpo,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email", data=data, method="POST",
+        headers={"api-key": api_key, "Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if 200 <= resp.status < 300:
+                return True, "Correo enviado correctamente."
+            return False, f"Brevo respondió con código {resp.status}."
+    except Exception as exc:
+        return False, f"No se pudo enviar el correo (Brevo): {exc}"
+
+
 def enviar_correo(destinatario, asunto, cuerpo):
     if not destinatario:
         return False, "El cliente no registró un correo electrónico."
+
+    resultado_brevo = _enviar_correo_brevo(destinatario, asunto, cuerpo)
+    if resultado_brevo is not None:
+        return resultado_brevo
+
     host = get_setting("smtp_host")
     port = get_setting("smtp_port")
     user = get_setting("smtp_user")
     password = get_setting("smtp_password")
     remitente = get_setting("smtp_from") or user
     if not (host and port and user and password):
-        return False, "La configuración de correo (SMTP) no está completa."
+        return False, "La configuración de correo no está completa (configura Brevo o SMTP)."
     try:
         msg = MIMEText(cuerpo, "plain", "utf-8")
         msg["Subject"] = asunto
@@ -204,6 +331,11 @@ def seguridad():
         if not session.get("admin"):
             return redirect(url_for("admin_login"))
 
+    # Protege el portal de clientes
+    if request.path.startswith("/cliente") and request.path != "/cliente/login":
+        if not session.get("cliente_id"):
+            return redirect(url_for("cliente_login"))
+
 
 @app.context_processor
 def inject_csrf():
@@ -241,11 +373,11 @@ def registro_post():
     conn.execute(
         """INSERT INTO solicitudes
            (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
-            num_cuotas, estado, viable, cuota_estimada, total_a_pagar, creado_en)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            num_cuotas, estado, viable, cuota_estimada, total_a_pagar, puntaje, clave_hash, creado_en)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
-         num_cuotas, "Pendiente", int(viable), cuota, total_a_pagar,
-         datetime.now().strftime("%Y-%m-%d %H:%M")),
+         num_cuotas, "Pendiente", int(viable), cuota, total_a_pagar, PUNTAJE_INICIAL,
+         generate_password_hash(cedula), datetime.now().strftime("%Y-%m-%d %H:%M")),
     )
     conn.commit()
     conn.close()
@@ -287,6 +419,10 @@ def admin_dashboard():
         d = dict(s)
         d["saldo"] = saldo
         d["abonado"] = abonado
+        pagos_s = conn.execute("SELECT * FROM pagos WHERE solicitud_id=?", (s["id"],)).fetchall()
+        d["cuotas"] = estado_cuenta(s, pagos_s)
+        d["atrasado"] = any(c["atrasada"] for c in d["cuotas"])
+        d["aumento"] = analisis_aumento(s)
         detalle.append(d)
         if s["estado"] == "Aprobado":
             total_prestado += s["monto_aprobado"] if s["monto_aprobado"] is not None else s["monto_solicitado"]
@@ -346,9 +482,10 @@ def admin_aprobar(sid):
 
     conn.execute(
         """UPDATE solicitudes
-           SET estado='Aprobado', monto_aprobado=?, num_cuotas=?, total_a_pagar=?, cuota_estimada=?
+           SET estado='Aprobado', monto_aprobado=?, num_cuotas=?, total_a_pagar=?, cuota_estimada=?,
+               fecha_aprobacion=?
            WHERE id=?""",
-        (monto_aprobado, num_cuotas, total_a_pagar, cuota, sid),
+        (monto_aprobado, num_cuotas, total_a_pagar, cuota, datetime.now().strftime("%Y-%m-%d"), sid),
     )
     conn.commit()
     conn.close()
@@ -365,6 +502,9 @@ def admin_aprobar(sid):
         f"  - Número de cuotas semanales: {num_cuotas}\n"
         f"  - Valor de cada cuota: {fmt_money(cuota)}\n\n"
         f"Pronto te contactaremos para coordinar la entrega y la primera visita de cobro.\n\n"
+        f"Puedes consultar tu estado de cuenta en cualquier momento ingresando a nuestro portal "
+        f"de clientes con tu número de cédula como usuario y contraseña inicial "
+        f"(te recomendamos cambiarla luego).\n\n"
         f"Créditos Crecer\n"
         f"Confianza · Seguridad · Rápido y fácil"
     )
@@ -408,6 +548,7 @@ def admin_pago(sid):
         (sid, monto, fecha, notas, datetime.now().strftime("%Y-%m-%d %H:%M")),
     )
     conn.commit()
+    recalcular_puntaje(conn, sid)
     saldo, abonado = saldo_pendiente(conn, s)
     conn.close()
 
@@ -463,6 +604,7 @@ def admin_pago_editar(pid):
     conn.execute("UPDATE pagos SET monto=?, fecha=?, notas=? WHERE id=?", (monto, fecha, notas, pid))
     conn.commit()
     sid = pago["solicitud_id"]
+    recalcular_puntaje(conn, sid)
     conn.close()
     flash("Abono corregido.")
     return redirect(url_for("admin_abonos", sid=sid))
@@ -478,9 +620,78 @@ def admin_pago_eliminar(pid):
     sid = pago["solicitud_id"]
     conn.execute("DELETE FROM pagos WHERE id=?", (pid,))
     conn.commit()
+    recalcular_puntaje(conn, sid)
     conn.close()
     flash("Abono eliminado.")
     return redirect(url_for("admin_abonos", sid=sid))
+
+
+# --------------------------------------------------------------------------- Portal de clientes
+@app.route("/cliente/login", methods=["GET", "POST"])
+def cliente_login():
+    if request.method == "POST":
+        cedula = request.form.get("cedula", "").strip()
+        clave = request.form.get("clave", "")
+        conn = get_db()
+        s = conn.execute("SELECT * FROM solicitudes WHERE cedula=?", (cedula,)).fetchone()
+        conn.close()
+        if s and s["clave_hash"] and check_password_hash(s["clave_hash"], clave):
+            session.clear()
+            session["cliente_id"] = s["id"]
+            session["csrf_token"] = secrets.token_hex(16)
+            return redirect(url_for("cliente_dashboard"))
+        flash("Cédula o contraseña incorrecta.")
+    return render_template("cliente_login.html")
+
+
+@app.route("/cliente/logout", methods=["POST"])
+def cliente_logout():
+    session.clear()
+    return redirect(url_for("cliente_login"))
+
+
+@app.route("/cliente")
+def cliente_dashboard():
+    conn = get_db()
+    s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (session["cliente_id"],)).fetchone()
+    if not s:
+        session.clear()
+        conn.close()
+        return redirect(url_for("cliente_login"))
+    pagos = conn.execute(
+        "SELECT * FROM pagos WHERE solicitud_id=? ORDER BY fecha DESC, id DESC", (s["id"],)
+    ).fetchall()
+    saldo, abonado = saldo_pendiente(conn, s)
+    conn.close()
+    cuotas = estado_cuenta(s, pagos)
+    aumento = analisis_aumento(s)
+    return render_template("cliente.html", s=s, pagos=pagos, saldo=saldo, abonado=abonado,
+                            cuotas=cuotas, aumento=aumento)
+
+
+@app.route("/cliente/clave", methods=["GET", "POST"])
+def cliente_clave():
+    if request.method == "POST":
+        actual = request.form.get("actual", "")
+        nueva = request.form.get("nueva", "")
+        confirmar = request.form.get("confirmar", "")
+        conn = get_db()
+        s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (session["cliente_id"],)).fetchone()
+        if not check_password_hash(s["clave_hash"], actual):
+            flash("La contraseña actual es incorrecta.")
+        elif len(nueva) < 4:
+            flash("La nueva contraseña debe tener al menos 4 caracteres.")
+        elif nueva != confirmar:
+            flash("La confirmación no coincide con la nueva contraseña.")
+        else:
+            conn.execute("UPDATE solicitudes SET clave_hash=? WHERE id=?",
+                          (generate_password_hash(nueva), s["id"]))
+            conn.commit()
+            flash("Contraseña actualizada correctamente.")
+            conn.close()
+            return redirect(url_for("cliente_dashboard"))
+        conn.close()
+    return render_template("cliente_clave.html")
 
 
 # --------------------------------------------------------------------------- Eliminar solicitud
@@ -554,13 +765,18 @@ def admin_clave():
 @app.route("/admin/configuracion", methods=["GET", "POST"])
 def admin_configuracion():
     if request.method == "POST":
-        set_setting("smtp_host", request.form.get("smtp_host", "").strip())
-        set_setting("smtp_port", request.form.get("smtp_port", "").strip())
-        set_setting("smtp_user", request.form.get("smtp_user", "").strip())
-        nueva_pass = request.form.get("smtp_password", "")
-        if nueva_pass:
-            set_setting("smtp_password", nueva_pass)
-        set_setting("smtp_from", request.form.get("smtp_from", "").strip())
+        if "smtp_host" in request.form:
+            set_setting("smtp_host", request.form.get("smtp_host", "").strip())
+            set_setting("smtp_port", request.form.get("smtp_port", "").strip())
+            set_setting("smtp_user", request.form.get("smtp_user", "").strip())
+            nueva_pass = request.form.get("smtp_password", "")
+            if nueva_pass:
+                set_setting("smtp_password", nueva_pass)
+        nueva_api_key = request.form.get("brevo_api_key", "")
+        if nueva_api_key:
+            set_setting("brevo_api_key", nueva_api_key)
+        if request.form.get("smtp_from", "").strip():
+            set_setting("smtp_from", request.form.get("smtp_from", "").strip())
         flash("Configuración de correo guardada.")
         return redirect(url_for("admin_configuracion"))
 
@@ -570,6 +786,7 @@ def admin_configuracion():
         "smtp_user": get_setting("smtp_user"),
         "smtp_from": get_setting("smtp_from"),
         "smtp_password_set": bool(get_setting("smtp_password")),
+        "brevo_api_key_set": bool(get_setting("brevo_api_key")),
     }
     return render_template("configuracion.html", config=config)
 

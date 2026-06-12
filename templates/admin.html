@@ -23,13 +23,13 @@
       <tr>
         <th>Cliente</th><th>Cédula</th><th>Contacto</th><th>Dirección</th>
         <th>Ingreso mensual</th><th>Monto</th><th>Cuotas</th><th>Cuota semanal</th>
-        <th>Total a pagar</th><th>Abonado</th><th>Saldo</th>
+        <th>Total a pagar</th><th>Abonado</th><th>Saldo</th><th>Puntaje</th>
         <th>Viabilidad</th><th>Estado / Aprobar</th><th>Visita</th><th>Registrar abono</th><th>Acciones</th>
       </tr>
     </thead>
     <tbody>
       {% for s in solicitudes %}
-      <tr>
+      <tr class="{{ 'atrasada' if s.atrasado else '' }}">
         <td>{{ s.nombre }}</td>
         <td>{{ s.cedula }}</td>
         <td>{{ s.telefono }}<br><span style="color:var(--muted)">{{ s.correo or 'sin correo' }}</span></td>
@@ -51,6 +51,12 @@
         <td>{{ s.total_a_pagar | money }}</td>
         <td>{{ s.abonado | money }}</td>
         <td>{{ s.saldo | money }}</td>
+        <td>
+          {{ s.puntaje }}
+          {% if s.aumento and s.aumento.elegible %}
+            <br><span class="badge viable" style="font-size:10px;">Elegible aumento</span>
+          {% endif %}
+        </td>
         <td>
           {% if s.viable %}<span class="badge viable">Viable</span>
           {% else %}<span class="badge no-viable">No viable</span>{% endif %}
@@ -103,7 +109,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="16">Aún no hay solicitudes registradas.</td></tr>
+      <tr><td colspan="17">Aún no hay solicitudes registradas.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Portal de clientes{% endblock %}
+{% block nav %}<a href="{{ url_for('registro') }}">Solicitar préstamo</a> <a href="{{ url_for('admin_login') }}">Administrador</a>{% endblock %}
+{% block content %}
+<div class="card" style="max-width:380px; margin:40px auto;">
+  <h2>Portal de clientes</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Ingresa con tu número de cédula y tu contraseña (por defecto es tu cédula).
+  </p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Cédula</label>
+    <input type="text" name="cedula" required autofocus>
+    <label>Contraseña</label>
+    <input type="password" name="clave" required>
+    <button type="submit">Ingresar</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Cambiar contraseña{% endblock %}
+{% block nav %}
+<nav class="admin-nav">
+  <a href="{{ url_for('cliente_dashboard') }}">Mi estado de cuenta</a>
+  <a href="{{ url_for('cliente_clave') }}" class="active">Cambiar contraseña</a>
+  <form method="POST" action="{{ url_for('cliente_logout') }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Salir</button>
+  </form>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px; margin:20px auto;">
+  <h2>Cambiar contraseña</h2>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Contraseña actual</label>
+    <input type="password" name="actual" required>
+    <label>Nueva contraseña</label>
+    <input type="password" name="nueva" required minlength="4">
+    <label>Confirmar nueva contraseña</label>
+    <input type="password" name="confirmar" required minlength="4">
+    <button type="submit">Actualizar contraseña</button>
+  </form>
+</div>
+{% endblock %}

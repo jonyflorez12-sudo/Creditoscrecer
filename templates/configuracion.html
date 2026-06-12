@@ -4,11 +4,32 @@
 {% block content %}
 {% set active = 'config' %}
 
-<div class="card" style="max-width:520px;">
-  <h2>Configuración de correo (SMTP)</h2>
+<div class="card" style="max-width:520px; border:1px solid var(--accent);">
+  <h2>Envío recomendado (Brevo, funciona en plan gratuito)</h2>
   <p style="color:var(--muted); font-size:13px;">
-    Estos datos se usan para enviar automáticamente los correos de aprobación de
-    préstamo y confirmación de abonos a los clientes. Si usas Gmail, crea una
+    El plan gratuito de Render bloquea los puertos de SMTP, por eso el correo
+    por Gmail puede fallar con "Network is unreachable". La solución es usar
+    <strong>Brevo</strong> (antes Sendinblue): crea una cuenta gratis en
+    brevo.com, genera una "API Key" (Settings &rarr; SMTP &amp; API &rarr; API Keys)
+    y pégala aquí. Con esto los correos se envían por HTTPS y sí funcionan en Render.
+  </p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Brevo API Key {% if config.brevo_api_key_set %}(ya configurada — déjala vacía para no cambiarla){% endif %}</label>
+    <input type="password" name="brevo_api_key" placeholder="{{ '••••••••' if config.brevo_api_key_set else 'xkeysib-...' }}">
+
+    <label>Correo remitente verificado en Brevo</label>
+    <input type="text" name="smtp_from" placeholder="creditoscrecer@gmail.com" value="{{ config.smtp_from }}">
+
+    <button type="submit">Guardar configuración</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:520px;">
+  <h2>Alternativa: SMTP (Gmail, etc.)</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Si configuras Brevo arriba, esta sección no se usa. Útil solo si corres la
+    app en un servidor que sí permita SMTP saliente. Si usas Gmail, crea una
     "contraseña de aplicación" en tu cuenta de Google y úsala aquí (no tu clave normal).
   </p>
   <form method="POST">

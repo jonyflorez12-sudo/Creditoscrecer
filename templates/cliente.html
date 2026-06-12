@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Mi estado de cuenta{% endblock %}
+{% block nav %}
+<nav class="admin-nav">
+  <a href="{{ url_for('cliente_dashboard') }}" class="active">Mi estado de cuenta</a>
+  <a href="{{ url_for('cliente_clave') }}">Cambiar contraseña</a>
+  <form method="POST" action="{{ url_for('cliente_logout') }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Salir</button>
+  </form>
+</nav>
+{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin-top:0;">Hola, {{ s.nombre }}</h2>
+  {% if s.estado != 'Aprobado' %}
+    <p>Tu solicitud está en estado <span class="badge {{ s.estado }}">{{ s.estado }}</span>.
+    Te avisaremos por correo cuando haya novedades.</p>
+  {% endif %}
+</div>
+
+{% if s.estado == 'Aprobado' %}
+<div class="cards">
+  <div class="card stat"><div class="label">Monto aprobado</div><div class="value accent">{{ (s.monto_aprobado or s.monto_solicitado) | money }}</div></div>
+  <div class="card stat"><div class="label">Total a pagar</div><div class="value">{{ s.total_a_pagar | money }}</div></div>
+  <div class="card stat"><div class="label">Cuota semanal</div><div class="value">{{ s.cuota_estimada | money }}</div></div>
+  <div class="card stat"><div class="label">Total abonado</div><div class="value green">{{ abonado | money }}</div></div>
+  <div class="card stat"><div class="label">Saldo pendiente</div><div class="value {{ 'yellow' if saldo > 0 else 'green' }}">{{ saldo | money }}</div></div>
+  <div class="card stat"><div class="label">Puntaje crediticio</div><div class="value {{ 'green' if s.puntaje >= 500 else ('yellow' if s.puntaje >= 400 else 'red') }}">{{ s.puntaje }}</div></div>
+</div>
+
+{% if aumento and aumento.elegible %}
+<div class="card" style="border:1px solid var(--green);">
+  <h2 style="margin-top:0; color:var(--green);">¡Eres elegible para un aumento de crédito!</h2>
+  <p>{{ aumento.mensaje }}</p>
+  <p>Monto sugerido: <strong class="value accent">{{ aumento.monto_sugerido | money }}</strong></p>
+  <p style="color:var(--muted); font-size:13px;">Si te interesa, contáctanos para iniciar tu nueva solicitud.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Plan de pagos semanal</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Las cuotas en rojo llevan más de una semana de atraso. Mantén tus pagos al día para subir tu puntaje crediticio.
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Cuota</th><th>Vence</th><th>Valor</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for c in cuotas %}
+      <tr class="{{ 'atrasada' if c.atrasada else '' }}">
+        <td>{{ c.numero }} / {{ s.num_cuotas }}</td>
+        <td>{{ c.vencimiento }}</td>
+        <td>{{ c.monto | money }}</td>
+        <td><span class="badge {{ c.estado }}">{{ c.estado }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Historial de abonos</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Fecha</th><th>Valor</th><th>Notas</th></tr></thead>
+    <tbody>
+      {% for p in pagos %}
+      <tr>
+        <td>{{ p.fecha }}</td>
+        <td>{{ p.monto | money }}</td>
+        <td>{{ p.notas or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">Aún no tienes abonos registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
