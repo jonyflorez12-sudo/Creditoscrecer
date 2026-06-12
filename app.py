@@ -90,6 +90,10 @@ def init_db():
         conn.execute("ALTER TABLE solicitudes ADD COLUMN clave_hash TEXT")
     if "fecha_aprobacion" not in cols:
         conn.execute("ALTER TABLE solicitudes ADD COLUMN fecha_aprobacion TEXT")
+    if "bloqueado" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN bloqueado INTEGER NOT NULL DEFAULT 0")
+    if "mora_revisada" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN mora_revisada INTEGER NOT NULL DEFAULT 0")
 
     # genera clave de acceso (cédula) para clientes que ya existían sin clave_hash
     sin_clave = conn.execute("SELECT id, cedula FROM solicitudes WHERE clave_hash IS NULL").fetchall()
@@ -208,6 +212,22 @@ def recalcular_puntaje(conn, sid):
     puntaje = max(PUNTAJE_MIN, min(PUNTAJE_MAX, puntaje))
     conn.execute("UPDATE solicitudes SET puntaje=? WHERE id=?", (puntaje, sid))
     conn.commit()
+
+
+def verificar_fin_credito(conn, s):
+    """Si el crédito ya llegó a su última cuota y quedó saldo pendiente, el
+    cliente queda en mora: puntaje en 0 y bloqueado para nuevas solicitudes
+    hasta que el administrador lo revise y le dé una nueva oportunidad."""
+    if s["estado"] != "Aprobado" or not s["fecha_aprobacion"] or s["mora_revisada"]:
+        return False
+    fecha_base = datetime.strptime(s["fecha_aprobacion"], "%Y-%m-%d")
+    fin_credito = fecha_base + timedelta(weeks=s["num_cuotas"])
+    saldo, _ = saldo_pendiente(conn, s)
+    if datetime.now() > fin_credito and saldo > 0.01:
+        conn.execute("UPDATE solicitudes SET puntaje=0, bloqueado=1, mora_revisada=1 WHERE id=?", (s["id"],))
+        conn.commit()
+        return True
+    return False
 
 
 def analisis_aumento(solicitud):
@@ -373,17 +393,27 @@ def registro_post():
     viable, cuota, total_a_pagar = evaluar_viabilidad(ingreso_mensual, monto_solicitado, num_cuotas)
 
     conn = get_db()
+
+    bloqueo = conn.execute(
+        "SELECT id FROM solicitudes WHERE cedula=? AND bloqueado=1 ORDER BY id DESC LIMIT 1", (cedula,)
+    ).fetchone()
+    estado_inicial = "Rechazado" if bloqueo else "Pendiente"
+    viable_final = 0 if bloqueo else int(viable)
+
     conn.execute(
         """INSERT INTO solicitudes
            (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
             num_cuotas, estado, viable, cuota_estimada, total_a_pagar, puntaje, clave_hash, creado_en)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
-         num_cuotas, "Pendiente", int(viable), cuota, total_a_pagar, PUNTAJE_INICIAL,
+         num_cuotas, estado_inicial, viable_final, cuota, total_a_pagar, PUNTAJE_INICIAL,
          generate_password_hash(cedula), datetime.now().strftime("%Y-%m-%d %H:%M")),
     )
     conn.commit()
     conn.close()
+
+    if bloqueo:
+        return render_template("gracias.html", nombre=nombre, bloqueado=True)
 
     return render_template("gracias.html", nombre=nombre, viable=viable, cuota=cuota,
                             total_a_pagar=total_a_pagar, num_cuotas=num_cuotas)
@@ -418,6 +448,8 @@ def admin_dashboard():
     detalle = []
     total_prestado = total_por_cobrar = total_abonado = 0
     for s in solicitudes:
+        if verificar_fin_credito(conn, s):
+            s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (s["id"],)).fetchone()
         saldo, abonado = saldo_pendiente(conn, s)
         d = dict(s)
         d["saldo"] = saldo
@@ -486,7 +518,7 @@ def admin_aprobar(sid):
     conn.execute(
         """UPDATE solicitudes
            SET estado='Aprobado', monto_aprobado=?, num_cuotas=?, total_a_pagar=?, cuota_estimada=?,
-               fecha_aprobacion=?
+               fecha_aprobacion=?, bloqueado=0, mora_revisada=0
            WHERE id=?""",
         (monto_aprobado, num_cuotas, total_a_pagar, cuota, datetime.now().strftime("%Y-%m-%d"), sid),
     )
@@ -501,8 +533,8 @@ def admin_aprobar(sid):
            else f" por {fmt_money(monto_aprobado)}")
         + ".\n\n"
         f"Detalles del préstamo:\n"
-        f"  - Total a pagar (incluye interés del {int(TASA_INTERES*100)}%): {fmt_money(total_a_pagar)}\n"
-        f"  - Número de cuotas semanales: {num_cuotas}\n"
+        f"  - Total a pagar: {fmt_money(total_a_pagar)}\n"
+        f"  - Número de cuotas: {num_cuotas}\n"
         f"  - Valor de cada cuota: {fmt_money(cuota)}\n\n"
         f"Pronto te contactaremos para coordinar la entrega y la primera visita de cobro.\n\n"
         f"Puedes consultar tu estado de cuenta en cualquier momento ingresando a nuestro portal "
@@ -517,6 +549,19 @@ def admin_aprobar(sid):
     else:
         flash(f"Préstamo aprobado. Aviso: {msg}")
 
+    return redirect(url_for("admin_dashboard"))
+
+
+# --------------------------------------------------------------------------- Desbloquear cliente (nueva oportunidad)
+@app.route("/admin/solicitud/<int:sid>/desbloquear", methods=["POST"])
+def admin_desbloquear(sid):
+    nuevo_puntaje = int(request.form.get("nuevo_puntaje") or PUNTAJE_INICIAL)
+    nuevo_puntaje = max(PUNTAJE_MIN, min(PUNTAJE_MAX, nuevo_puntaje))
+    conn = get_db()
+    conn.execute("UPDATE solicitudes SET bloqueado=0, puntaje=? WHERE id=?", (nuevo_puntaje, sid))
+    conn.commit()
+    conn.close()
+    flash("Cliente desbloqueado con nuevo puntaje.")
     return redirect(url_for("admin_dashboard"))
 
 
@@ -661,6 +706,8 @@ def cliente_dashboard():
         session.clear()
         conn.close()
         return redirect(url_for("cliente_login"))
+    if verificar_fin_credito(conn, s):
+        s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (s["id"],)).fetchone()
     pagos = conn.execute(
         "SELECT * FROM pagos WHERE solicitud_id=? ORDER BY fecha DESC, id DESC", (s["id"],)
     ).fetchall()

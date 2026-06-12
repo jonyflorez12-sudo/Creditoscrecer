@@ -18,13 +18,19 @@
     <p>Tu solicitud está en estado <span class="badge {{ s.estado }}">{{ s.estado }}</span>.
     Te avisaremos por correo cuando haya novedades.</p>
   {% endif %}
+  {% if s.bloqueado %}
+    <p style="color:var(--red); font-weight:600;">
+      Tu cuenta está bloqueada para nuevas solicitudes debido a saldo pendiente al finalizar tu crédito.
+      Contacta a un asesor para revisar tu caso.
+    </p>
+  {% endif %}
 </div>
 
 {% if s.estado == 'Aprobado' %}
 <div class="cards">
   <div class="card stat"><div class="label">Monto aprobado</div><div class="value accent">{{ (s.monto_aprobado or s.monto_solicitado) | money }}</div></div>
   <div class="card stat"><div class="label">Total a pagar</div><div class="value">{{ s.total_a_pagar | money }}</div></div>
-  <div class="card stat"><div class="label">Cuota semanal</div><div class="value">{{ s.cuota_estimada | money }}</div></div>
+  <div class="card stat"><div class="label">Valor de cuota</div><div class="value">{{ s.cuota_estimada | money }}</div></div>
   <div class="card stat"><div class="label">Total abonado</div><div class="value green">{{ abonado | money }}</div></div>
   <div class="card stat"><div class="label">Saldo pendiente</div><div class="value {{ 'yellow' if saldo > 0 else 'green' }}">{{ saldo | money }}</div></div>
   <div class="card stat"><div class="label">Puntaje crediticio</div><div class="value {{ 'green' if s.puntaje >= 500 else ('yellow' if s.puntaje >= 400 else 'red') }}">{{ s.puntaje }}</div></div>
@@ -40,7 +46,7 @@
 {% endif %}
 
 <div class="card">
-  <h2>Plan de pagos semanal</h2>
+  <h2>Plan de cuotas diferidas</h2>
   <p style="color:var(--muted); font-size:13px;">
     Las cuotas en rojo llevan más de una semana de atraso. Mantén tus pagos al día para subir tu puntaje crediticio.
   </p>

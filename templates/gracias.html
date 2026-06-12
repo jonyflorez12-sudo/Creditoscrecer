@@ -5,11 +5,15 @@
 <div class="card">
   <h2>¡Gracias, {{ nombre }}!</h2>
   <p>Tu solicitud ha sido registrada correctamente.</p>
-  <p>Total a pagar (capital + interés del 20%): <strong>${{ "{:,.0f}".format(total_a_pagar) }}</strong> en {{ num_cuotas }} cuotas semanales.</p>
-  {% if viable %}
-    <p><span class="badge viable">Pre-aprobado</span> Según tus datos, tu solicitud es viable. Cuota semanal estimada: <strong>${{ "{:,.0f}".format(cuota) }}</strong>. Pronto te contactaremos para agendar una visita.</p>
+  {% if bloqueado %}
+    <p><span class="badge no-viable">No viable</span> Un asesor se contactará contigo próximamente.</p>
   {% else %}
-    <p><span class="badge no-viable">No viable por ahora</span> Cuota semanal estimada: <strong>${{ "{:,.0f}".format(cuota) }}</strong>. Esta cuota supera tu capacidad de pago según el ingreso reportado. Un asesor revisará tu caso.</p>
+    <p>Total a pagar: <strong>${{ "{:,.0f}".format(total_a_pagar) }}</strong> en {{ num_cuotas }} cuotas.</p>
+    {% if viable %}
+      <p><span class="badge viable">Pre-aprobado</span> Según tus datos, tu solicitud es viable. Valor de cada cuota: <strong>${{ "{:,.0f}".format(cuota) }}</strong>. Pronto te contactaremos para agendar una visita.</p>
+    {% else %}
+      <p><span class="badge no-viable">No viable por ahora</span> Valor de cada cuota: <strong>${{ "{:,.0f}".format(cuota) }}</strong>. Esta cuota supera tu capacidad de pago según el ingreso reportado. Un asesor revisará tu caso.</p>
+    {% endif %}
   {% endif %}
   <a href="{{ url_for('registro') }}"><button class="secondary">Volver al inicio</button></a>
 </div>

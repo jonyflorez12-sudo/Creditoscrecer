@@ -22,7 +22,7 @@
     <thead>
       <tr>
         <th>Cliente</th><th>Cédula</th><th>Contacto</th><th>Dirección</th>
-        <th>Ingreso mensual</th><th>Monto</th><th>Cuotas</th><th>Cuota semanal</th>
+        <th>Ingreso mensual</th><th>Monto</th><th>Cuotas</th><th>Valor cuota</th>
         <th>Total a pagar</th><th>Abonado</th><th>Saldo</th><th>Puntaje</th>
         <th>Viabilidad</th><th>Estado / Aprobar</th><th>Visita</th><th>Registrar abono</th><th>Acciones</th>
       </tr>
@@ -55,6 +55,14 @@
           {{ s.puntaje }}
           {% if s.aumento and s.aumento.elegible %}
             <br><span class="badge viable" style="font-size:10px;">Elegible aumento</span>
+          {% endif %}
+          {% if s.bloqueado %}
+            <br><span class="badge no-viable" style="font-size:10px;">Bloqueado</span>
+            <form class="inline row" method="POST" action="{{ url_for('admin_desbloquear', sid=s.id) }}" style="margin-top:6px;" title="Quita el bloqueo y le asigna un nuevo puntaje inicial">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="number" name="nuevo_puntaje" placeholder="Puntaje" min="300" max="850" value="400" style="width:70px">
+              <button type="submit" class="secondary">Desbloquear</button>
+            </form>
           {% endif %}
         </td>
         <td>
