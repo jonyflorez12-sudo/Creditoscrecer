@@ -90,6 +90,12 @@
           <div style="margin-top:6px; color:var(--muted); font-size:12px;">
             Aprobado: {{ s.monto_aprobado | money }} / {{ s.num_cuotas }} cuotas
           </div>
+          {% if not s.bloqueado %}
+          <form method="POST" action="{{ url_for('admin_simular_mora', sid=s.id) }}" style="margin-top:6px;" title="[Prueba] Marca este crédito como vencido sin pagar para probar el bloqueo">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary" style="font-size:11px; padding:4px 8px;">[Prueba] Simular mora</button>
+          </form>
+          {% endif %}
           {% endif %}
         </td>
         <td>

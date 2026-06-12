@@ -552,6 +552,24 @@ def admin_aprobar(sid):
     return redirect(url_for("admin_dashboard"))
 
 
+# --------------------------------------------------------------------------- [TEMPORAL] Simular fin de crédito vencido (para pruebas)
+@app.route("/admin/solicitud/<int:sid>/simular_mora", methods=["POST"])
+def admin_simular_mora(sid):
+    conn = get_db()
+    s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
+    if not s or s["estado"] != "Aprobado":
+        conn.close()
+        flash("El préstamo debe estar Aprobado para simular esto.")
+        return redirect(url_for("admin_dashboard"))
+    fecha_pasada = (datetime.now() - timedelta(weeks=s["num_cuotas"] + 1)).strftime("%Y-%m-%d")
+    conn.execute("UPDATE solicitudes SET fecha_aprobacion=?, bloqueado=0, mora_revisada=0 WHERE id=?",
+                  (fecha_pasada, sid))
+    conn.commit()
+    conn.close()
+    flash("Simulación aplicada: este crédito ahora aparece vencido sin pagar.")
+    return redirect(url_for("admin_dashboard"))
+
+
 # --------------------------------------------------------------------------- Desbloquear cliente (nueva oportunidad)
 @app.route("/admin/solicitud/<int:sid>/desbloquear", methods=["POST"])
 def admin_desbloquear(sid):
