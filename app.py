@@ -156,16 +156,16 @@ def estado_cuenta(solicitud, pagos):
     fecha_base = datetime.strptime(solicitud["fecha_aprobacion"], "%Y-%m-%d")
     abonado_total = sum(p["monto"] for p in pagos)
     hoy = datetime.now()
+    total_a_pagar = solicitud["total_a_pagar"]
 
     acumulado_esperado = 0
     for n in range(1, solicitud["num_cuotas"] + 1):
         vencimiento = fecha_base + timedelta(weeks=n)
-        acumulado_esperado += solicitud["cuota_estimada"]
+        acumulado_esperado = min(acumulado_esperado + solicitud["cuota_estimada"], total_a_pagar)
         if abonado_total >= acumulado_esperado - 0.01:
             estado = "Pagada"
-        elif hoy > vencimiento:
-            dias_atraso = (hoy - vencimiento).days
-            estado = "Atrasada" if dias_atraso > 7 else "Pendiente"
+        elif hoy > vencimiento + timedelta(days=7):
+            estado = "Atrasada"
         else:
             estado = "Pendiente"
         cuotas.append({
@@ -190,20 +190,20 @@ def recalcular_puntaje(conn, sid):
 
     puntaje = PUNTAJE_INICIAL
     fecha_base = datetime.strptime(s["fecha_aprobacion"], "%Y-%m-%d")
+    total_a_pagar = s["total_a_pagar"]
+    hoy = datetime.now()
     acumulado_esperado = 0
-    acumulado_pagado = 0
     for n in range(1, s["num_cuotas"] + 1):
         vencimiento = fecha_base + timedelta(weeks=n)
-        acumulado_esperado += s["cuota_estimada"]
+        acumulado_esperado = min(acumulado_esperado + s["cuota_estimada"], total_a_pagar)
         acumulado_pagado = sum(
             p["monto"] for p in pagos if datetime.strptime(p["fecha"], "%Y-%m-%d") <= vencimiento
         )
-        if vencimiento > datetime.now():
-            continue  # cuota aún no vence, no afecta el puntaje todavía
         if acumulado_pagado >= acumulado_esperado - 0.01:
-            puntaje += 10  # pago puntual
-        else:
+            puntaje += 10  # pago puntual (o anticipado)
+        elif hoy > vencimiento:
             puntaje -= 15  # cuota atrasada
+        # si la cuota aún no vence y no se ha cubierto, no afecta el puntaje todavía
 
     puntaje = max(PUNTAJE_MIN, min(PUNTAJE_MAX, puntaje))
     conn.execute("UPDATE solicitudes SET puntaje=? WHERE id=?", (puntaje, sid))
