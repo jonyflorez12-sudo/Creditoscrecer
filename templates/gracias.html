@@ -7,6 +7,8 @@
   <p>Tu solicitud ha sido registrada correctamente.</p>
   {% if bloqueado %}
     <p><span class="badge no-viable">No viable</span> Un asesor se contactará contigo próximamente.</p>
+  {% elif credito_activo %}
+    <p><span class="badge no-viable">No viable</span> Ya tienes un crédito activo. Cuando esté cerca de finalizar (solo falte la última cuota), podrás solicitar uno nuevo.</p>
   {% else %}
     <p>Total a pagar: <strong>${{ "{:,.0f}".format(total_a_pagar) }}</strong> en {{ num_cuotas }} cuotas.</p>
     {% if viable %}

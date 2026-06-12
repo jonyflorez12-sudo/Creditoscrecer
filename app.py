@@ -230,6 +230,28 @@ def verificar_fin_credito(conn, s):
     return False
 
 
+def credito_activo_no_renovable(conn, cedula):
+    """Si el cliente tiene un crédito Aprobado con saldo pendiente, solo se
+    permite una nueva solicitud cuando ya solo falta la última cuota por pagar.
+    En cualquier otro caso (crédito recién iniciado o a mitad de pago) se
+    informa que ya tiene un crédito activo."""
+    activos = conn.execute(
+        "SELECT * FROM solicitudes WHERE cedula=? AND estado='Aprobado' AND bloqueado=0", (cedula,)
+    ).fetchall()
+    for s in activos:
+        saldo, _ = saldo_pendiente(conn, s)
+        if saldo <= 0.01:
+            continue  # ya está pagado, no cuenta como activo
+        pagos = conn.execute("SELECT * FROM pagos WHERE solicitud_id=?", (s["id"],)).fetchall()
+        cuotas = estado_cuenta(s, pagos)
+        if not cuotas:
+            return True
+        pendientes = [c for c in cuotas if c["estado"] != "Pagada"]
+        if len(pendientes) > 1 or (pendientes and pendientes[0]["numero"] != s["num_cuotas"]):
+            return True  # tiene crédito activo, no solo la última cuota pendiente
+    return False
+
+
 def analisis_aumento(solicitud):
     """Sugiere si el cliente es elegible para un aumento de crédito según su puntaje."""
     if solicitud["estado"] != "Aprobado":
@@ -397,8 +419,9 @@ def registro_post():
     bloqueo = conn.execute(
         "SELECT id FROM solicitudes WHERE cedula=? AND bloqueado=1 ORDER BY id DESC LIMIT 1", (cedula,)
     ).fetchone()
-    estado_inicial = "Rechazado" if bloqueo else "Pendiente"
-    viable_final = 0 if bloqueo else int(viable)
+    credito_activo = False if bloqueo else credito_activo_no_renovable(conn, cedula)
+    estado_inicial = "Rechazado" if (bloqueo or credito_activo) else "Pendiente"
+    viable_final = 0 if (bloqueo or credito_activo) else int(viable)
 
     conn.execute(
         """INSERT INTO solicitudes
@@ -414,6 +437,9 @@ def registro_post():
 
     if bloqueo:
         return render_template("gracias.html", nombre=nombre, bloqueado=True)
+
+    if credito_activo:
+        return render_template("gracias.html", nombre=nombre, credito_activo=True)
 
     return render_template("gracias.html", nombre=nombre, viable=viable, cuota=cuota,
                             total_a_pagar=total_a_pagar, num_cuotas=num_cuotas)
