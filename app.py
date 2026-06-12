@@ -1,4 +1,4 @@
-import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request
+import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request, urllib.error
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -266,6 +266,9 @@ def _enviar_correo_brevo(destinatario, asunto, cuerpo):
             if 200 <= resp.status < 300:
                 return True, "Correo enviado correctamente."
             return False, f"Brevo respondió con código {resp.status}."
+    except urllib.error.HTTPError as exc:
+        detalle = exc.read().decode("utf-8", "ignore")
+        return False, f"No se pudo enviar el correo (Brevo): HTTP {exc.code} - {detalle}"
     except Exception as exc:
         return False, f"No se pudo enviar el correo (Brevo): {exc}"
 
@@ -772,7 +775,7 @@ def admin_configuracion():
             nueva_pass = request.form.get("smtp_password", "")
             if nueva_pass:
                 set_setting("smtp_password", nueva_pass)
-        nueva_api_key = request.form.get("brevo_api_key", "")
+        nueva_api_key = request.form.get("brevo_api_key", "").strip()
         if nueva_api_key:
             set_setting("brevo_api_key", nueva_api_key)
         if request.form.get("smtp_from", "").strip():
