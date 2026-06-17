@@ -944,24 +944,34 @@ def admin_importar():
         xls = pd.ExcelFile(_BIO(contenido))
         sheets_upper = {s.strip().upper(): s for s in xls.sheet_names}
 
-        def encontrar_hoja(*keywords, excluir='FINALIZADO'):
+        def encontrar_hojas(*keywords):
+            """Devuelve TODAS las hojas cuyos nombres contienen alguna de las keywords."""
+            resultado = []
             for kw in keywords:
                 for upper, real in sheets_upper.items():
-                    if kw in upper and excluir not in upper:
-                        return real
-            return None
+                    if kw in upper and real not in resultado:
+                        resultado.append(real)
+            return resultado
 
-        hoja_clientes = encontrar_hoja('CLIENTE')
-        hoja_docs = encontrar_hoja('DOCUMENTO', 'PRESTAMO', 'CREDITO')
-        hoja_abonos = encontrar_hoja('ABONO', 'PAGO')
+        def combinar_hojas(hojas):
+            frames = []
+            for h in hojas:
+                df = _leer_hoja_excel(contenido, h)
+                if not df.empty:
+                    frames.append(df)
+            return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-        if not hoja_docs:
+        hojas_clientes = encontrar_hojas('CLIENTE')
+        hojas_docs = encontrar_hojas('DOCUMENTO', 'PRESTAMO', 'CREDITO')
+        hojas_abonos = encontrar_hojas('ABONO', 'PAGO')
+
+        if not hojas_docs:
             flash("No se encontró la hoja de documentos/préstamos. Verifica que el archivo tenga una hoja llamada DOCUMENTOS.")
             return redirect(url_for("admin_importar"))
 
-        df_clientes = _leer_hoja_excel(contenido, hoja_clientes) if hoja_clientes else pd.DataFrame()
-        df_docs = _leer_hoja_excel(contenido, hoja_docs)
-        df_abonos = _leer_hoja_excel(contenido, hoja_abonos) if hoja_abonos else pd.DataFrame()
+        df_clientes = combinar_hojas(hojas_clientes)
+        df_docs = combinar_hojas(hojas_docs)
+        df_abonos = combinar_hojas(hojas_abonos)
 
         # Diccionario COD CLIENTE → {telefono, correo}
         info_cliente = {}
