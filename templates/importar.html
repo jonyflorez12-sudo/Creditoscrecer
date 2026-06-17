@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Importar créditos desde Excel{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:600px; border:1px solid var(--accent);">
+  <h2>Importar créditos desde Excel</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Sube el archivo Excel de cuentas por cobrar para cargar los créditos anteriores al sistema.
+    El archivo debe tener hojas llamadas <strong>DOCUMENTOS</strong>, <strong>CLIENTES</strong> y <strong>ABONOS</strong>
+    (como el archivo de Créditos Crecer). Los créditos que ya existen en el sistema se omiten automáticamente.
+  </p>
+
+  <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Archivo Excel (.xlsx)</label>
+    <input type="file" name="archivo" accept=".xlsx,.xls" required
+           style="border:1px solid var(--border); padding:8px; border-radius:6px; width:100%; margin-bottom:12px;">
+    <button type="submit">Importar</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:600px;">
+  <h2>¿Qué se importa?</h2>
+  <ul style="color:var(--muted); font-size:13px; line-height:1.8;">
+    <li><strong>Créditos</strong> (hoja DOCUMENTOS): nombre, cédula (NRO DOC), dirección, monto prestado, cuotas, total a pagar, fecha de inicio.</li>
+    <li><strong>Contacto</strong> (hoja CLIENTES): teléfono y correo del cliente.</li>
+    <li><strong>Abonos</strong> (hoja ABONOS): cada pago registrado, con su valor y fecha.</li>
+    <li>El puntaje crediticio se calcula automáticamente según el historial de pagos importado.</li>
+    <li>Cada cliente queda habilitado para ingresar al portal con su número de cédula como contraseña inicial.</li>
+    <li>Los créditos que ya están en el sistema (misma cédula como Aprobado) se <strong>omiten</strong> sin modificar.</li>
+  </ul>
+</div>
+{% endblock %}

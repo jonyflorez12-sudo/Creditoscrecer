@@ -1,4 +1,5 @@
 import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request, urllib.error
+import pandas as pd
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -895,6 +896,194 @@ def admin_configuracion_probar():
     ok, msg = enviar_correo(destino, "Correo de prueba - Créditos Crecer", cuerpo)
     flash(("Éxito: " if ok else "Error: ") + msg)
     return redirect(url_for("admin_configuracion"))
+
+
+# --------------------------------------------------------------------------- Importar desde Excel
+def _to_float(v):
+    try:
+        if v is None:
+            return 0.0
+        import math
+        if isinstance(v, float) and math.isnan(v):
+            return 0.0
+        return float(v)
+    except Exception:
+        return 0.0
+
+
+def _leer_hoja_excel(contenido_bytes, nombre_hoja):
+    """Lee una hoja buscando la fila que contiene los encabezados reales."""
+    from io import BytesIO as _BIO
+    df_raw = pd.read_excel(_BIO(contenido_bytes), sheet_name=nombre_hoja, header=None)
+    for i, row in df_raw.iterrows():
+        vals = [str(v).strip() for v in row.values]
+        if any(m in vals for m in ('COD CLIENTE', 'NRO DOC')):
+            # Normalizar nombres de columna (quitar espacios múltiples y nans)
+            cols = [' '.join(str(v).split()) if str(v).strip() not in ('nan', '') else None
+                    for v in row.values]
+            data = df_raw.iloc[i + 1:].copy()
+            data.columns = cols
+            return data.dropna(how='all').reset_index(drop=True)
+    return pd.DataFrame()
+
+
+@app.route("/admin/importar", methods=["GET", "POST"])
+def admin_importar():
+    if request.method == "GET":
+        return render_template("importar.html")
+
+    archivo = request.files.get("archivo")
+    if not archivo or not archivo.filename:
+        flash("Selecciona un archivo Excel (.xlsx) para importar.")
+        return redirect(url_for("admin_importar"))
+
+    try:
+        from io import BytesIO as _BIO
+        contenido = archivo.read()
+
+        xls = pd.ExcelFile(_BIO(contenido))
+        sheets_upper = {s.strip().upper(): s for s in xls.sheet_names}
+
+        def encontrar_hoja(*keywords, excluir='FINALIZADO'):
+            for kw in keywords:
+                for upper, real in sheets_upper.items():
+                    if kw in upper and excluir not in upper:
+                        return real
+            return None
+
+        hoja_clientes = encontrar_hoja('CLIENTE')
+        hoja_docs = encontrar_hoja('DOCUMENTO', 'PRESTAMO', 'CREDITO')
+        hoja_abonos = encontrar_hoja('ABONO', 'PAGO')
+
+        if not hoja_docs:
+            flash("No se encontró la hoja de documentos/préstamos. Verifica que el archivo tenga una hoja llamada DOCUMENTOS.")
+            return redirect(url_for("admin_importar"))
+
+        df_clientes = _leer_hoja_excel(contenido, hoja_clientes) if hoja_clientes else pd.DataFrame()
+        df_docs = _leer_hoja_excel(contenido, hoja_docs)
+        df_abonos = _leer_hoja_excel(contenido, hoja_abonos) if hoja_abonos else pd.DataFrame()
+
+        # Diccionario COD CLIENTE → {telefono, correo}
+        info_cliente = {}
+        if not df_clientes.empty:
+            for _, row in df_clientes.iterrows():
+                cod = str(row.get('COD CLIENTE') or '').strip()
+                if not cod or cod == 'nan':
+                    continue
+                tel = str(row.get('CELULAR') or '').strip()
+                cor = str(row.get('CORREO') or '').strip()
+                # Limpiar valores "No refiere" / NaN
+                tel = '' if tel.lower() in ('no refiere', 'nan', '') else tel.replace('.0', '')
+                cor = '' if cor.lower() in ('no refiere', 'nan', '') else cor
+                info_cliente[cod] = {'telefono': tel, 'correo': cor}
+
+        conn = get_db()
+        importados = omitidos = pagos_importados = 0
+        nro_a_sid = {}  # NRO DOC → solicitud_id
+
+        for _, row in df_docs.iterrows():
+            nro_doc = str(row.get('NRO DOC') or '').strip()
+            if not nro_doc or nro_doc == 'nan':
+                continue
+            nombre = str(row.get('CLIENTE') or '').strip()
+            if not nombre or nombre == 'nan':
+                continue
+
+            # ¿Ya existe en la BD?
+            existente = conn.execute(
+                "SELECT id FROM solicitudes WHERE cedula=? AND estado='Aprobado'", (nro_doc,)
+            ).fetchone()
+            if existente:
+                nro_a_sid[nro_doc] = existente['id']
+                omitidos += 1
+                continue
+
+            cod_cliente = str(row.get('COD CLIENTE') or '').strip()
+            info = info_cliente.get(cod_cliente, {})
+
+            telefono = info.get('telefono') or 'Sin teléfono'
+            correo = info.get('correo') or ''
+            direccion = str(row.get('UBICACIÓN') or row.get('UBICACION') or '').strip()
+            direccion = direccion if direccion not in ('nan', '') else 'Sin dirección'
+
+            monto_real = _to_float(row.get('VALOR REAL PRESTADO'))
+            total_a_pagar = _to_float(row.get('VALOR A COBRAR'))
+            if monto_real <= 0:
+                monto_real = round(total_a_pagar / 1.2, 2)
+            dias = _to_float(row.get('DÍAS DE CRÉDITO') or row.get('DIAS DE CREDITO')) or 42
+            num_cuotas = max(1, round(dias / 7))
+            cuota_estimada = round(total_a_pagar / num_cuotas, 2) if total_a_pagar else 0
+
+            fecha_raw = row.get('FECHA DE EMISIÓN') or row.get('FECHA DE EMISION')
+            try:
+                fecha_aprobacion = pd.Timestamp(fecha_raw).strftime('%Y-%m-%d')
+            except Exception:
+                fecha_aprobacion = datetime.now().strftime('%Y-%m-%d')
+
+            ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
+            cur = conn.execute(
+                """INSERT INTO solicitudes
+                   (nombre, cedula, telefono, correo, direccion, ingreso_mensual,
+                    monto_solicitado, num_cuotas, estado, viable, cuota_estimada,
+                    total_a_pagar, monto_aprobado, puntaje, clave_hash,
+                    fecha_aprobacion, bloqueado, mora_revisada, creado_en)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (nombre, nro_doc, telefono, correo, direccion,
+                 0, monto_real, num_cuotas, 'Aprobado', 1,
+                 cuota_estimada, total_a_pagar, monto_real, PUNTAJE_INICIAL,
+                 generate_password_hash(nro_doc),
+                 fecha_aprobacion, 0, 0, ahora)
+            )
+            conn.commit()
+            nro_a_sid[nro_doc] = cur.lastrowid
+            importados += 1
+
+        # Importar abonos
+        if not df_abonos.empty:
+            for _, row in df_abonos.iterrows():
+                nro_doc = str(row.get('NRO DOC') or '').strip()
+                if not nro_doc or nro_doc == 'nan':
+                    continue
+                # Soportar NRO DOC compuesto como "1033680536-01"
+                base = nro_doc.split('-')[0]
+                sid = nro_a_sid.get(nro_doc) or nro_a_sid.get(base)
+                if not sid:
+                    continue
+                valor = _to_float(row.get('VALOR ABONADO'))
+                if valor <= 0:
+                    continue
+                fecha_raw = row.get('FECHA DE ABONO')
+                try:
+                    fecha_str = pd.Timestamp(fecha_raw).strftime('%Y-%m-%d')
+                except Exception:
+                    continue
+                # Evitar duplicados: si ya existe un pago igual, omitir
+                dup = conn.execute(
+                    "SELECT id FROM pagos WHERE solicitud_id=? AND monto=? AND fecha=?",
+                    (sid, valor, fecha_str)
+                ).fetchone()
+                if dup:
+                    continue
+                ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
+                conn.execute(
+                    "INSERT INTO pagos (solicitud_id, monto, fecha, notas, creado_en) VALUES (?,?,?,?,?)",
+                    (sid, valor, fecha_str, 'Importado desde Excel', ahora)
+                )
+                pagos_importados += 1
+            conn.commit()
+
+        # Recalcular puntaje de todos los importados
+        for sid in set(nro_a_sid.values()):
+            recalcular_puntaje(conn, sid)
+        conn.close()
+
+        flash(f"✓ Importación completada: {importados} créditos nuevos, "
+              f"{pagos_importados} abonos importados, {omitidos} ya existían (omitidos).")
+        return redirect(url_for("admin_dashboard"))
+
+    except Exception as exc:
+        flash(f"Error al procesar el archivo: {exc}")
+        return redirect(url_for("admin_importar"))
 
 
 # --------------------------------------------------------------------------- Exportar a Excel
