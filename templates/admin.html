@@ -82,13 +82,28 @@
           {% if s.estado != 'Aprobado' %}
           <form class="inline row" method="POST" action="{{ url_for('admin_aprobar', sid=s.id) }}" style="margin-top:6px;" title="Aprueba con un monto y N° de cuotas distintos al solicitado si es necesario">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="number" name="monto_aprobado" placeholder="Monto a aprobar" min="0" step="1000" value="{{ s.monto_solicitado | int }}" style="width:110px">
-            <input type="number" name="num_cuotas_aprobadas" placeholder="Cuotas" min="1" max="52" value="{{ s.num_cuotas }}" style="width:60px">
+            <input type="number" name="monto_aprobado" placeholder="Monto" min="0" step="1000" value="{{ s.monto_solicitado | int }}" style="width:100px">
+            <input type="number" name="num_cuotas_aprobadas" placeholder="Cuotas" min="1" max="52" value="{{ s.num_cuotas }}" style="width:55px">
+            <select name="dias_cobro" style="width:145px" title="Días de cobro">
+              <option value="Lunes">Lunes</option>
+              <option value="Martes">Martes</option>
+              <option value="Miércoles">Miércoles</option>
+              <option value="Jueves">Jueves</option>
+              <option value="Viernes">Viernes</option>
+              <option value="Sábado">Sábado</option>
+              <option value="Domingo">Domingo</option>
+              <option value="Lunes,Jueves">Lunes y Jueves</option>
+              <option value="Lunes,Viernes">Lunes y Viernes</option>
+              <option value="Martes,Viernes">Martes y Viernes</option>
+              <option value="Martes,Sábado">Martes y Sábado</option>
+              <option value="Miércoles,Sábado">Miércoles y Sábado</option>
+            </select>
             <button type="submit" class="secondary">Aprobar</button>
           </form>
           {% else %}
           <div style="margin-top:6px; color:var(--muted); font-size:12px;">
-            Aprobado: {{ s.monto_aprobado | money }} / {{ s.num_cuotas }} cuotas
+            Aprobado: {{ s.monto_aprobado | money }} / {{ s.num_cuotas }} cuotas<br>
+            Cobro: <strong>{{ s.dias_cobro or 'Lunes' }}</strong>
           </div>
           {% if not s.bloqueado %}
           <form method="POST" action="{{ url_for('admin_simular_mora', sid=s.id) }}" style="margin-top:6px;" title="[Prueba] Marca este crédito como vencido sin pagar para probar el bloqueo">

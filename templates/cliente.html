@@ -52,11 +52,13 @@
   </p>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Cuota</th><th>Vence</th><th>Valor</th><th>Estado</th></tr></thead>
+    <thead><tr><th>#</th><th>Semana</th><th>Día</th><th>Fecha</th><th>Valor</th><th>Estado</th></tr></thead>
     <tbody>
       {% for c in cuotas %}
       <tr class="{{ 'atrasada' if c.atrasada else '' }}">
-        <td>{{ c.numero }} / {{ s.num_cuotas }}</td>
+        <td>{{ c.numero }}</td>
+        <td>{{ c.semana }}</td>
+        <td>{{ c.dia_nombre }}</td>
         <td>{{ c.vencimiento }}</td>
         <td>{{ c.monto | money }}</td>
         <td><span class="badge {{ c.estado }}">{{ c.estado }}</span></td>

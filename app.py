@@ -95,6 +95,8 @@ def init_db():
         conn.execute("ALTER TABLE solicitudes ADD COLUMN bloqueado INTEGER NOT NULL DEFAULT 0")
     if "mora_revisada" not in cols:
         conn.execute("ALTER TABLE solicitudes ADD COLUMN mora_revisada INTEGER NOT NULL DEFAULT 0")
+    if "dias_cobro" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN dias_cobro TEXT NOT NULL DEFAULT 'Lunes'")
 
     # genera clave de acceso (cédula) para clientes que ya existían sin clave_hash
     sin_clave = conn.execute("SELECT id, cedula FROM solicitudes WHERE clave_hash IS NULL").fetchall()
@@ -149,11 +151,38 @@ def saldo_pendiente(conn, solicitud):
 
 PUNTAJE_MIN, PUNTAJE_MAX, PUNTAJE_INICIAL = 300, 850, 400
 
+# Mapeo nombre de día → número Python (lunes=0 … domingo=6)
+_DIAS_NUM = {
+    'lunes': 0, 'martes': 1, 'miércoles': 2, 'miercoles': 2,
+    'jueves': 3, 'viernes': 4, 'sábado': 5, 'sabado': 5, 'domingo': 6,
+}
+_DIAS_NOMBRE = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+
+def _parsear_dias(dias_cobro_str):
+    """Devuelve lista de números de día de la semana a partir de 'Lunes' o 'Lunes,Jueves'."""
+    if not dias_cobro_str:
+        return [0]  # Lunes por defecto
+    dias = []
+    for d in dias_cobro_str.split(','):
+        n = _DIAS_NUM.get(d.strip().lower())
+        if n is not None and n not in dias:
+            dias.append(n)
+    return dias if dias else [0]
+
+
+def _fecha_pago(fecha_base, semana, dia_semana_num):
+    """Calcula la fecha real de pago: primer día 'dia_semana_num' a partir
+    de (fecha_base + (semana-1) semanas). Si la fecha base ya es ese día
+    de la semana, lo toma a partir de la semana siguiente."""
+    inicio_semana = fecha_base + timedelta(weeks=semana - 1)
+    delta = (dia_semana_num - inicio_semana.weekday()) % 7
+    if delta == 0 and semana == 1:
+        delta = 7  # el primer pago es la semana que viene, no el mismo día
+    return inicio_semana + timedelta(days=delta)
+
 
 def estado_cuenta(solicitud, pagos):
-    """Genera el plan de pagos semanal y marca en rojo ('atrasada') las cuotas
-    cuyo vencimiento ya pasó hace más de 1 semana y aún no están cubiertas
-    por el total abonado hasta la fecha."""
     cuotas = []
     if solicitud["estado"] != "Aprobado" or not solicitud["fecha_aprobacion"]:
         return cuotas
@@ -162,30 +191,41 @@ def estado_cuenta(solicitud, pagos):
     abonado_total = sum(p["monto"] for p in pagos)
     hoy = datetime.now()
     total_a_pagar = solicitud["total_a_pagar"]
+    dias = _parsear_dias(solicitud["dias_cobro"] if "dias_cobro" in solicitud.keys() else "Lunes")
+    n_dias = len(dias)
+    monto_sub = round(solicitud["cuota_estimada"] / n_dias, 2)
 
     acumulado_esperado = 0
-    for n in range(1, solicitud["num_cuotas"] + 1):
-        vencimiento = fecha_base + timedelta(weeks=n)
-        acumulado_esperado = min(acumulado_esperado + solicitud["cuota_estimada"], total_a_pagar)
-        if abonado_total >= acumulado_esperado - 0.01:
-            estado = "Pagada"
-        elif hoy > vencimiento + timedelta(days=7):
-            estado = "Atrasada"
-        else:
-            estado = "Pendiente"
-        cuotas.append({
-            "numero": n,
-            "vencimiento": vencimiento.strftime("%Y-%m-%d"),
-            "monto": round(solicitud["cuota_estimada"], 2),
-            "estado": estado,
-            "atrasada": estado == "Atrasada",
-        })
+    numero = 0
+    total_entradas = solicitud["num_cuotas"] * n_dias
+
+    for semana in range(1, solicitud["num_cuotas"] + 1):
+        for i, dia_num in enumerate(dias):
+            numero += 1
+            vencimiento = _fecha_pago(fecha_base, semana, dia_num)
+            es_ultimo = (numero == total_entradas)
+            acumulado_esperado = total_a_pagar if es_ultimo else min(
+                acumulado_esperado + monto_sub, total_a_pagar
+            )
+            if abonado_total >= acumulado_esperado - 0.01:
+                estado = "Pagada"
+            elif hoy > vencimiento + timedelta(days=7):
+                estado = "Atrasada"
+            else:
+                estado = "Pendiente"
+            cuotas.append({
+                "numero": numero,
+                "semana": semana,
+                "dia_nombre": _DIAS_NOMBRE[dia_num],
+                "vencimiento": vencimiento.strftime("%Y-%m-%d"),
+                "monto": monto_sub,
+                "estado": estado,
+                "atrasada": estado == "Atrasada",
+            })
     return cuotas
 
 
 def recalcular_puntaje(conn, sid):
-    """Ajusta el puntaje crediticio (estilo datacrédito, 300-850, inicia en 400)
-    según la puntualidad de los abonos frente a las cuotas semanales."""
     s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
     if s["estado"] != "Aprobado" or not s["fecha_aprobacion"]:
         return
@@ -193,22 +233,34 @@ def recalcular_puntaje(conn, sid):
         "SELECT * FROM pagos WHERE solicitud_id=? ORDER BY fecha ASC, id ASC", (sid,)
     ).fetchall()
 
-    puntaje = PUNTAJE_INICIAL
-    fecha_base = datetime.strptime(s["fecha_aprobacion"], "%Y-%m-%d")
+    dias = _parsear_dias(s["dias_cobro"] if "dias_cobro" in s.keys() else "Lunes")
+    n_dias = len(dias)
+    monto_sub = round(s["cuota_estimada"] / n_dias, 2)
     total_a_pagar = s["total_a_pagar"]
+    fecha_base = datetime.strptime(s["fecha_aprobacion"], "%Y-%m-%d")
     hoy = datetime.now()
+    total_entradas = s["num_cuotas"] * n_dias
+
+    puntaje = PUNTAJE_INICIAL
     acumulado_esperado = 0
-    for n in range(1, s["num_cuotas"] + 1):
-        vencimiento = fecha_base + timedelta(weeks=n)
-        acumulado_esperado = min(acumulado_esperado + s["cuota_estimada"], total_a_pagar)
-        acumulado_pagado = sum(
-            p["monto"] for p in pagos if datetime.strptime(p["fecha"], "%Y-%m-%d") <= vencimiento
-        )
-        if acumulado_pagado >= acumulado_esperado - 0.01:
-            puntaje += 10  # pago puntual (o anticipado)
-        elif hoy > vencimiento:
-            puntaje -= 15  # cuota atrasada
-        # si la cuota aún no vence y no se ha cubierto, no afecta el puntaje todavía
+    numero = 0
+
+    for semana in range(1, s["num_cuotas"] + 1):
+        for i, dia_num in enumerate(dias):
+            numero += 1
+            vencimiento = _fecha_pago(fecha_base, semana, dia_num)
+            es_ultimo = (numero == total_entradas)
+            acumulado_esperado = total_a_pagar if es_ultimo else min(
+                acumulado_esperado + monto_sub, total_a_pagar
+            )
+            acumulado_pagado = sum(
+                p["monto"] for p in pagos
+                if datetime.strptime(p["fecha"], "%Y-%m-%d") <= vencimiento
+            )
+            if acumulado_pagado >= acumulado_esperado - 0.01:
+                puntaje += 10
+            elif hoy > vencimiento:
+                puntaje -= 15
 
     puntaje = max(PUNTAJE_MIN, min(PUNTAJE_MAX, puntaje))
     conn.execute("UPDATE solicitudes SET puntaje=? WHERE id=?", (puntaje, sid))
@@ -248,7 +300,8 @@ def credito_activo_no_renovable(conn, cedula):
         if not cuotas:
             return True
         pendientes = [c for c in cuotas if c["estado"] != "Pagada"]
-        if len(pendientes) > 1 or (pendientes and pendientes[0]["numero"] != s["num_cuotas"]):
+        ultimo_numero = cuotas[-1]["numero"] if cuotas else 0
+        if len(pendientes) > 1 or (pendientes and pendientes[0]["numero"] != ultimo_numero):
             return True  # tiene crédito activo, no solo la última cuota pendiente
     return False
 
@@ -534,6 +587,7 @@ def admin_aprobar(sid):
 
     monto_aprobado = float(request.form.get("monto_aprobado") or s["monto_solicitado"])
     num_cuotas = int(request.form.get("num_cuotas_aprobadas") or s["num_cuotas"])
+    dias_cobro = request.form.get("dias_cobro", "Lunes").strip() or "Lunes"
     if monto_aprobado <= 0:
         monto_aprobado = s["monto_solicitado"]
     if num_cuotas <= 0:
@@ -545,9 +599,9 @@ def admin_aprobar(sid):
     conn.execute(
         """UPDATE solicitudes
            SET estado='Aprobado', monto_aprobado=?, num_cuotas=?, total_a_pagar=?, cuota_estimada=?,
-               fecha_aprobacion=?, bloqueado=0, mora_revisada=0
+               fecha_aprobacion=?, dias_cobro=?, bloqueado=0, mora_revisada=0
            WHERE id=?""",
-        (monto_aprobado, num_cuotas, total_a_pagar, cuota, datetime.now().strftime("%Y-%m-%d"), sid),
+        (monto_aprobado, num_cuotas, total_a_pagar, cuota, datetime.now().strftime("%Y-%m-%d"), dias_cobro, sid),
     )
     conn.commit()
     conn.close()
@@ -1030,19 +1084,31 @@ def admin_importar():
             except Exception:
                 fecha_aprobacion = datetime.now().strftime('%Y-%m-%d')
 
+            # Leer días de cobro del Excel
+            dias_raw = str(row.get('Dias de cobro') or row.get('DIAS DE COBRO') or 'Lunes').strip()
+            dias_cobro = dias_raw if dias_raw not in ('nan', '') else 'Lunes'
+            _norm = {'lunes': 'Lunes', 'martes': 'Martes', 'miércoles': 'Miércoles',
+                     'miercoles': 'Miércoles', 'jueves': 'Jueves', 'viernes': 'Viernes',
+                     'sábado': 'Sábado', 'sabado': 'Sábado', 'domingo': 'Domingo',
+                     'domingos': 'Domingo', 'lunes ': 'Lunes', 'martes ': 'Martes'}
+            dias_cobro = ','.join(
+                _norm.get(d.strip().lower(), d.strip().capitalize())
+                for d in dias_cobro.split(',') if d.strip()
+            )
+
             ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
             cur = conn.execute(
                 """INSERT INTO solicitudes
                    (nombre, cedula, telefono, correo, direccion, ingreso_mensual,
                     monto_solicitado, num_cuotas, estado, viable, cuota_estimada,
                     total_a_pagar, monto_aprobado, puntaje, clave_hash,
-                    fecha_aprobacion, bloqueado, mora_revisada, creado_en)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    fecha_aprobacion, dias_cobro, bloqueado, mora_revisada, creado_en)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (nombre, nro_doc, telefono, correo, direccion,
                  0, monto_real, num_cuotas, 'Aprobado', 1,
                  cuota_estimada, total_a_pagar, monto_real, PUNTAJE_INICIAL,
                  generate_password_hash(nro_doc),
-                 fecha_aprobacion, 0, 0, ahora)
+                 fecha_aprobacion, dias_cobro, 0, 0, ahora)
             )
             conn.commit()
             nro_a_sid[nro_doc] = cur.lastrowid
