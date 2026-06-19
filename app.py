@@ -104,10 +104,12 @@ def init_db():
         conn.execute("UPDATE solicitudes SET clave_hash=? WHERE id=?",
                       (generate_password_hash(row["cedula"]), row["id"]))
 
-    for clave in ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from", "brevo_api_key"):
+    for clave in ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
+                  "brevo_api_key", "recordatorio_token"):
         row = conn.execute("SELECT valor FROM settings WHERE clave=?", (clave,)).fetchone()
         if not row:
-            conn.execute("INSERT INTO settings (clave, valor) VALUES (?, ?)", (clave, ""))
+            valor = secrets.token_urlsafe(32) if clave == "recordatorio_token" else ""
+            conn.execute("INSERT INTO settings (clave, valor) VALUES (?, ?)", (clave, valor))
     conn.commit()
     conn.close()
 
@@ -1212,6 +1214,95 @@ def admin_exportar():
     nombre_archivo = f"creditos_crecer_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return send_file(buf, as_attachment=True, download_name=nombre_archivo,
                       mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# --------------------------------------------------------------------------- Recordatorios automáticos (cron job)
+@app.route("/recordatorios")
+def recordatorios_automaticos():
+    """Endpoint que llama el cron job externo (cron-job.org) cada día.
+    Requiere el token secreto como parámetro ?token=... para evitar abusos."""
+    token_enviado = request.args.get("token", "")
+    token_guardado = get_setting("recordatorio_token")
+    if not token_guardado or not secrets.compare_digest(token_enviado, token_guardado):
+        abort(403)
+
+    hoy = datetime.now()
+    manana = hoy + timedelta(days=1)
+    conn = get_db()
+    solicitudes = conn.execute(
+        "SELECT * FROM solicitudes WHERE estado='Aprobado' AND bloqueado=0"
+    ).fetchall()
+
+    enviados = 0
+    errores = 0
+
+    for s in solicitudes:
+        if not s["correo"] or not s["fecha_aprobacion"]:
+            continue
+        pagos = conn.execute(
+            "SELECT * FROM pagos WHERE solicitud_id=?", (s["id"],)
+        ).fetchall()
+        cuotas = estado_cuenta(s, pagos)
+
+        # Buscar cuotas pendientes que vencen hoy o mañana
+        recordar = []
+        for c in cuotas:
+            if c["estado"] != "Pendiente":
+                continue
+            try:
+                fv = datetime.strptime(c["vencimiento"], "%Y-%m-%d")
+            except ValueError:
+                continue
+            if fv.date() == hoy.date() or fv.date() == manana.date():
+                recordar.append(c)
+
+        if not recordar:
+            continue
+
+        # Construir mensaje
+        lineas = []
+        for c in recordar:
+            cuando = "HOY" if datetime.strptime(c["vencimiento"], "%Y-%m-%d").date() == hoy.date() else "MAÑANA"
+            lineas.append(f"  • {cuando} {c['dia_nombre']} {c['vencimiento']}: {fmt_money(c['monto'])}")
+
+        saldo, _ = saldo_pendiente(conn, s)
+        cuerpo = (
+            f"Hola {s['nombre']},\n\n"
+            f"Te recordamos que tienes pagos próximos en tu crédito con Créditos Crecer:\n\n"
+            + "\n".join(lineas) +
+            f"\n\nSaldo pendiente total: {fmt_money(saldo)}\n\n"
+            f"Si ya realizaste tu pago, ignora este mensaje.\n"
+            f"Para ver tu estado de cuenta completo ingresa al portal de clientes "
+            f"con tu número de cédula.\n\n"
+            f"Créditos Crecer\n"
+            f"Confianza · Seguridad · Rápido y fácil"
+        )
+        ok, _ = enviar_correo(
+            s["correo"],
+            f"Recordatorio de pago - Créditos Crecer",
+            cuerpo
+        )
+        if ok:
+            enviados += 1
+        else:
+            errores += 1
+
+    conn.close()
+    return {
+        "ok": True,
+        "fecha": hoy.strftime("%Y-%m-%d %H:%M"),
+        "enviados": enviados,
+        "errores": errores,
+        "revisados": len(solicitudes),
+    }
+
+
+@app.route("/admin/recordatorios")
+def admin_recordatorios():
+    """Página del admin que muestra el token y la URL del cron job."""
+    token = get_setting("recordatorio_token")
+    url_cron = url_for("recordatorios_automaticos", token=token, _external=True)
+    return render_template("recordatorios.html", token=token, url_cron=url_cron)
 
 
 init_db()

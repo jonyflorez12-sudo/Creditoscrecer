@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Recordatorios automáticos{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:640px; border:1px solid var(--accent);">
+  <h2>Recordatorios automáticos de pago</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Configura <strong>cron-job.org</strong> para que llame esta URL cada día a las 8am.
+    El sistema enviará un correo a cada cliente que tenga una cuota que vence <strong>hoy o mañana</strong>.
+  </p>
+
+  <label>URL del cron job (cópiala completa)</label>
+  <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+    <input type="text" id="url-cron" value="{{ url_cron }}" readonly
+           style="flex:1; font-size:11px; font-family:monospace; background:var(--surface2);">
+    <button type="button" onclick="copiar()" class="secondary">Copiar</button>
+  </div>
+
+  <h3 style="margin-top:0;">Cómo configurarlo en cron-job.org (gratis)</h3>
+  <ol style="color:var(--muted); font-size:13px; line-height:2;">
+    <li>Ve a <strong>cron-job.org</strong> y crea una cuenta gratis.</li>
+    <li>Haz clic en <strong>"Create cronjob"</strong>.</li>
+    <li>En <strong>URL</strong> pega la URL de arriba.</li>
+    <li>En <strong>Schedule</strong> elige <em>Every day</em> a las <strong>8:00am</strong> (hora Colombia = UTC-5, pon 13:00 UTC).</li>
+    <li>Guarda. Desde ese momento se ejecuta solo cada día.</li>
+  </ol>
+
+  <div style="background:var(--surface2); border-radius:8px; padding:12px; margin-top:8px; font-size:12px; color:var(--muted);">
+    <strong>Seguridad:</strong> La URL contiene un token secreto único. Solo quien tenga esta URL puede disparar los recordatorios.
+    Si necesitas regenerar el token, contacta al soporte técnico.
+  </div>
+</div>
+
+<div class="card" style="max-width:640px;">
+  <h2>Probar ahora</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Haz clic para enviar los recordatorios del día en este momento y verificar que funcione.
+  </p>
+  <a href="{{ url_cron }}" target="_blank">
+    <button class="secondary">Ejecutar recordatorios ahora</button>
+  </a>
+</div>
+
+<script>
+function copiar() {
+  const input = document.getElementById('url-cron');
+  input.select();
+  document.execCommand('copy');
+  alert('URL copiada al portapapeles');
+}
+</script>
+{% endblock %}
