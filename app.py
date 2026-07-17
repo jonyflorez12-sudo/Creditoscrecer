@@ -1014,13 +1014,18 @@ def admin_importar():
             for h in hojas:
                 df = _leer_hoja_excel(contenido, h)
                 if not df.empty:
-                    # Renombrar columnas duplicadas para que pd.concat no falle
-                    cols = pd.Series(df.columns)
-                    for dup in cols[cols.duplicated()].unique():
-                        idxs = cols[cols == dup].index.tolist()
-                        for n, i in enumerate(idxs[1:], 1):
-                            cols[i] = f"{dup}_{n}"
-                    df.columns = cols
+                    # Reemplazar None/NaN en nombres de columna y luego deduplicar
+                    seen = {}
+                    nuevas = []
+                    for c in df.columns:
+                        nombre = str(c) if c is not None and str(c) != 'nan' else '_col'
+                        if nombre in seen:
+                            seen[nombre] += 1
+                            nombre = f"{nombre}_{seen[nombre]}"
+                        else:
+                            seen[nombre] = 0
+                        nuevas.append(nombre)
+                    df.columns = nuevas
                     frames.append(df)
             return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
