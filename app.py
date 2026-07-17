@@ -1014,6 +1014,13 @@ def admin_importar():
             for h in hojas:
                 df = _leer_hoja_excel(contenido, h)
                 if not df.empty:
+                    # Renombrar columnas duplicadas para que pd.concat no falle
+                    cols = pd.Series(df.columns)
+                    for dup in cols[cols.duplicated()].unique():
+                        idxs = cols[cols == dup].index.tolist()
+                        for n, i in enumerate(idxs[1:], 1):
+                            cols[i] = f"{dup}_{n}"
+                    df.columns = cols
                     frames.append(df)
             return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
