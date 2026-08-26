@@ -7,29 +7,45 @@
   <p style="color:var(--muted)">Completa tus datos. Te contactaremos para confirmar la viabilidad y agendar una visita.</p>
   <form method="POST" action="{{ url_for('registro_post') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Nombre completo</label>
+
+    <label>Nombre completo *</label>
     <input type="text" name="nombre" required>
 
-    <label>Cédula</label>
+    <label>Cédula *</label>
     <input type="text" name="cedula" required>
 
-    <label>Teléfono</label>
+    <label>Teléfono principal *</label>
     <input type="text" name="telefono" required>
 
-    <label>Correo electrónico</label>
+    <label>Correo electrónico *</label>
     <input type="email" name="correo" placeholder="para enviarte notificaciones de tu préstamo" required>
 
-    <label>Dirección</label>
+    <label>Dirección (residencia o establecimiento comercial) *</label>
     <input type="text" name="direccion" required>
 
-    <label>Ingreso mensual ($)</label>
+    <label>Ingreso mensual ($) *</label>
     <input type="number" name="ingreso_mensual" min="0" step="1000" required>
 
-    <label>Monto solicitado ($)</label>
+    <label>Monto solicitado ($) *</label>
     <input type="number" name="monto_solicitado" min="0" step="1000" required>
 
-    <label>Número de cuotas semanales</label>
+    <label>Número de cuotas semanales *</label>
     <input type="number" name="num_cuotas" min="1" max="52" value="7" required>
+
+    <hr style="margin:20px 0; border-color:var(--surface2);">
+    <h3 style="margin-bottom:8px;">Contacto alternativo</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
+      En caso de no encontrarte, ¿a quién podemos contactar? (opcional)
+    </p>
+
+    <label>Teléfono alterno</label>
+    <input type="text" name="telefono_alterno" placeholder="Ej: 3001234567">
+
+    <label>Nombre del contacto alterno</label>
+    <input type="text" name="nombre_alterno" placeholder="Nombre completo">
+
+    <label>Parentesco</label>
+    <input type="text" name="parentesco_alterno" placeholder="Ej: esposo/a, hijo/a, hermano/a">
 
     <p style="color:var(--muted); font-size:13px; margin-top:14px;">
       Recuerda: por cada $1.000.000 prestado se pagan $1.200.000 en total

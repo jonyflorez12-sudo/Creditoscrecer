@@ -16,7 +16,28 @@
     {% else %}
       <p><span class="badge no-viable">No viable por ahora</span> Valor de cada cuota: <strong>${{ "{:,.0f}".format(cuota) }}</strong>. Esta cuota supera tu capacidad de pago según el ingreso reportado. Un asesor revisará tu caso.</p>
     {% endif %}
+
+    {% if whatsapp_numero %}
+    <div style="margin-top:20px; padding:16px; background:var(--surface2); border-radius:8px;">
+      <p style="font-weight:600; margin-bottom:10px;">📱 Envíanos tu documentación por WhatsApp</p>
+      <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
+        Para continuar con el estudio de tu solicitud necesitamos los siguientes documentos:
+      </p>
+      <ul style="color:var(--muted); font-size:13px; line-height:1.8; margin-bottom:14px;">
+        <li>📸 Foto del establecimiento comercial</li>
+        <li>📄 Foto de la cédula de ciudadanía por ambos lados</li>
+        <li>🤳 Foto reciente de la persona que hace la solicitud</li>
+        <li>📍 Ubicación y dirección de residencia o establecimiento</li>
+      </ul>
+      {% set msg = "Hola, soy " + nombre + " con cédula " + (cedula or '') + ". Acabo de registrar una solicitud de crédito en su plataforma y les envío mi documentación: foto del establecimiento, cédula por ambos lados, foto reciente y mi dirección: " + (direccion or '') + ". Teléfono: " + (telefono or '') + "." %}
+      <a href="https://wa.me/{{ whatsapp_numero }}?text={{ msg | urlencode }}" target="_blank" rel="noopener">
+        <button style="background:#25D366; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-size:14px; cursor:pointer;">
+          💬 Enviar documentos por WhatsApp
+        </button>
+      </a>
+    </div>
+    {% endif %}
   {% endif %}
-  <a href="{{ url_for('registro') }}"><button class="secondary">Volver al inicio</button></a>
+  <a href="{{ url_for('registro') }}" style="display:inline-block; margin-top:16px;"><button class="secondary">Volver al inicio</button></a>
 </div>
 {% endblock %}

@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Ferroviario — CIE-LDR ↔ LDR-CIE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#222;font-size:13px}
+
+nav{background:#1a3a5c;color:#fff;padding:0 16px;display:flex;align-items:center;height:52px;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+nav h1{font-size:15px;font-weight:700;margin-right:24px;white-space:nowrap}
+nav button{background:none;border:none;color:rgba(255,255,255,.7);padding:0 14px;height:52px;cursor:pointer;font-size:13px;border-bottom:3px solid transparent;transition:.2s}
+nav button:hover{color:#fff;background:rgba(255,255,255,.08)}
+nav button.active{color:#fff;border-bottom-color:#4db8ff}
+
+main{padding:14px;max-width:1500px;margin:0 auto}
+.tab-content{display:none}.tab-content.active{display:block}
+
+.sec-hdr{background:#1a3a5c;color:#fff;padding:7px 12px;font-size:11px;font-weight:700;letter-spacing:.6px;border-radius:4px 4px 0 0;margin-top:14px}
+.kpi-wrap{background:#eef2f7;border-radius:0 0 4px 4px;overflow:hidden;margin-bottom:2px}
+.kpi-row{display:grid;gap:1px}
+.kpi-hdr{background:#1a3a5c;color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;padding:5px 8px;text-align:center;line-height:1.3}
+.kpi-cell{background:#fff;padding:8px 6px;text-align:center}
+.kpi-val{font-size:26px;font-weight:700;line-height:1.1}
+.kpi-sub{font-size:9px;color:#666;margin-top:3px;line-height:1.3}
+.kpi-col{overflow:hidden}
+.green{color:#00B050}.orange{color:#FF8C00}.red{color:#c00}.blue{color:#1a3a5c}
+
+.part-panel{background:#fff;padding:6px 8px;text-align:left;height:100%}
+.part-panel .ph{font-size:10px;font-weight:700;color:#fff;background:#1a3a5c;padding:2px 5px;margin:3px -8px;margin-top:4px}
+.part-panel table{width:100%;border-collapse:collapse;font-size:10px}
+.part-panel td{padding:2px 4px;border-bottom:1px solid #f0f0f0}
+.part-panel td:last-child{text-align:right;font-weight:700}
+.top-ret{background:#ffe066}
+
+.cap-table{width:100%;border-collapse:collapse;background:#fff;border-radius:0 0 4px 4px}
+.cap-table th{background:#1a3a5c;color:#fff;padding:7px 10px;text-align:left;font-size:11px}
+.cap-table td{padding:6px 10px;border-bottom:1px solid #eee;font-size:12px}
+.cap-table tr:hover td{background:#f5f8fc}
+
+/* CHARTS */
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-bottom:16px}
+.chart-card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.chart-title{font-size:13px;font-weight:700;color:#1a3a5c;margin-bottom:12px;border-bottom:2px solid #e0e8f0;padding-bottom:6px}
+.chart-box{position:relative;height:270px}
+
+/* FORM */
+.form-card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:16px}
+.form-card h2{color:#1a3a5c;font-size:15px;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e0e8f0}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:10px;font-weight:700;color:#1a3a5c;text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select{padding:7px 9px;border:1px solid #ccd;border-radius:4px;font-size:13px;width:100%}
+.fg input:focus,.fg select:focus{outline:none;border-color:#1a3a5c}
+.calc-box{background:#eef4fb;border:1px solid #b8d4f0;border-radius:4px;padding:7px 9px;font-size:14px;font-weight:700;color:#1a3a5c}
+
+.ct{width:100%;border-collapse:collapse;margin-bottom:8px}
+.ct th{background:#1a3a5c;color:#fff;font-size:10px;padding:5px 7px;text-align:left}
+.ct td{padding:3px 5px;border-bottom:1px solid #eee}
+.ct td input{width:100%;padding:3px 6px;border:1px solid #ddd;border-radius:3px;font-size:12px}
+
+.btn{padding:7px 16px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700}
+.btn-primary{background:#1a3a5c;color:#fff}
+.btn-success{background:#00B050;color:#fff}
+.btn-danger{background:#dc3545;color:#fff;font-size:11px;padding:3px 8px}
+.btn-add{background:#e8f0f8;color:#1a3a5c;border:1px dashed #1a3a5c}
+.btn-outline{background:#fff;color:#1a3a5c;border:1px solid #1a3a5c}
+
+/* HISTORIAL */
+.hist-wrap{background:#fff;border-radius:8px;overflow:auto;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.ht{width:100%;border-collapse:collapse;font-size:11px}
+.ht th{background:#1a3a5c;color:#fff;padding:7px 9px;text-align:left;font-size:10px;white-space:nowrap}
+.ht td{padding:5px 8px;border-bottom:1px solid #eee;vertical-align:middle}
+.ht tr:hover td{background:#f5f8fc}
+.editable{cursor:pointer;border-bottom:1px dashed #aac!important}
+.editable:hover{background:#eef4fb!important}
+.edit-input{width:100%;padding:2px 5px;border:1px solid #1a3a5c;border-radius:3px;font-size:11px;min-width:140px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
+.badge-CIE-LDR{background:#dbeafe;color:#1d4ed8}
+.badge-LDR-CIE{background:#dcfce7;color:#166534}
+
+.fbar{background:#fff;border-radius:8px;padding:10px 16px;box-shadow:0 2px 6px rgba(0,0,0,.08);margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fbar label{font-size:11px;font-weight:700;color:#1a3a5c}
+.fbar input,.fbar select{padding:5px 9px;border:1px solid #ccd;border-radius:4px;font-size:12px}
+.fbar .spacer{flex:1}
+.no-data{text-align:center;color:#999;padding:30px}
+
+/* Tooltip edit hint */
+.edit-hint{font-size:9px;color:#aaa;margin-left:4px}
+
+/* ── SCROLL WRAPPER ── */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:0 0 4px 4px}
+
+/* ── RESPONSIVE (≤768 px) ───────────────────────────────── */
+@media(max-width:768px){
+  /* Nav: horizontal-scroll tab bar */
+  nav{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+      padding:0 6px;gap:0;scroll-behavior:smooth}
+  nav::-webkit-scrollbar{display:none}
+  nav h1{font-size:12px;margin-right:10px;flex-shrink:0}
+  nav button{padding:0 10px;font-size:11px;white-space:nowrap;flex-shrink:0;height:44px}
+
+  /* Main */
+  main{padding:8px}
+
+  /* Filter bar */
+  .fbar{gap:6px 10px;padding:10px 12px}
+  .fbar .spacer{display:none}
+  .fbar input[type=date]{font-size:14px;padding:7px 8px}
+  .fbar input[type=number]{width:58px!important;font-size:13px;padding:6px 7px}
+
+  /* KPI cells */
+  .kpi-val{font-size:18px}
+  .kpi-hdr{font-size:9px;padding:4px 5px}
+  .kpi-sub{font-size:9px}
+  .kpi-cell{padding:7px 5px}
+
+  /* Row 2: participation panel spans full width */
+  #kpi-r2 .kpi-col:last-child{grid-column:1/-1}
+
+  /* Charts: single column, shorter height */
+  .charts-grid{grid-template-columns:1fr;gap:12px}
+  .chart-box{height:230px}
+
+  /* Cap table: horizontal scroll */
+  .cap-table{min-width:520px}
+  .cap-table th,.cap-table td{padding:6px 8px;font-size:11px}
+
+  /* Form: single column */
+  .fgrid{grid-template-columns:1fr}
+
+  /* History table smaller text */
+  .ht th,.ht td{padding:4px 6px;font-size:10px}
+
+  /* Settings tap-friendly */
+  .btn{min-height:38px}
+}
+
+/* ── RESPONSIVE (≤480 px phones) ───────────────────────── */
+@media(max-width:480px){
+  .kpi-val{font-size:16px}
+  nav h1{font-size:11px}
+  .chart-box{height:200px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <h1>🚂 CIE-LDR ↔ LDR-CIE</h1>
+  <button class="active" onclick="showTab('dashboard',this)">Dashboard KPI</button>
+  <button onclick="showTab('graficos',this)">Gráficos</button>
+  <button onclick="showTab('registrar',this)">Registrar Tren</button>
+  <button onclick="showTab('historial',this)">Historial</button>
+  <div style="flex:1"></div>
+  <span id="sync-badge" style="font-size:11px;color:rgba(255,255,255,.8);white-space:nowrap;display:none"></span>
+  <button onclick="openSettings()" style="background:rgba(255,255,255,.12);border:none;color:#fff;padding:0 12px;height:32px;border-radius:5px;cursor:pointer;font-size:13px;margin-left:8px">⚙</button>
+</nav>
+
+<main>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="tab-dashboard" class="tab-content active">
+  <div class="fbar">
+    <label>Periodo:</label>
+    <input type="date" id="d-desde" onchange="renderDashboard()">
+    <span style="color:#999">→</span>
+    <input type="date" id="d-hasta" onchange="renderDashboard()">
+    <button class="btn btn-outline" onclick="setFilterAll()">Todo</button>
+    <div class="spacer"></div>
+    <label>Meta ciclo (d):</label>
+    <input type="number" id="meta-ciclo" value="7" step="0.5" min="1" style="width:65px" onchange="renderDashboard()">
+    <label>Meta trenes/mes:</label>
+    <input type="number" id="meta-trenes" value="4" min="1" style="width:65px" onchange="renderDashboard()">
+  </div>
+
+  <div class="sec-hdr">1. INDICADORES CLAVE DE DESEMPEÑO (KPI)</div>
+  <div class="kpi-wrap">
+    <div class="kpi-row" id="kpi-r1" style="grid-template-columns:repeat(6,1fr)"></div>
+    <div style="height:1px;background:#d0d6e4"></div>
+    <div class="kpi-row" id="kpi-r2"></div>
+    <div style="height:1px;background:#d0d6e4"></div>
+    <div class="kpi-row" id="kpi-r3" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div style="height:1px;background:#d0d6e4"></div>
+    <div id="ciclo-desglose-bar" style="background:#fff;padding:8px 12px 2px"></div>
+    <div class="kpi-row" id="kpi-r4" style="grid-template-columns:repeat(4,1fr)"></div>
+  </div>
+
+  <div class="sec-hdr" style="margin-top:14px">1.1 CAPACIDAD TEÓRICA — Objetivos y brechas</div>
+  <div class="table-scroll">
+  <table class="cap-table">
+    <thead><tr><th>Métrica</th><th>Actual</th><th>Objetivo</th><th>Brecha</th><th>Estado</th><th>Comentario</th></tr></thead>
+    <tbody id="cap-body"></tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ===== GRÁFICOS ===== -->
+<div id="tab-graficos" class="tab-content">
+  <div class="charts-grid">
+    <div class="chart-card"><div class="chart-title">Tonelaje total CIE-LDR vs LDR-CIE</div><div class="chart-box"><canvas id="g-tonaje"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Plataformas CIE-LDR vs LDR-CIE</div><div class="chart-box"><canvas id="g-plat"></canvas></div></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card"><div id="title-cli-cie" class="chart-title">Composición CIE-LDR por cliente</div><div class="chart-box"><canvas id="g-cli-cie"></canvas></div></div>
+    <div class="chart-card"><div id="title-cli-ldr" class="chart-title">Composición LDR-CIE por cliente</div><div class="chart-box"><canvas id="g-cli-ldr"></canvas></div></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card"><div class="chart-title">Backhaul % por intermodal</div><div class="chart-box"><canvas id="g-backhaul"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Toneladas por intermodal (CIE-LDR vs LDR-CIE)</div><div class="chart-box"><canvas id="g-ton-tren"></canvas></div></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card"><div class="chart-title">Permanencia en La Dorada por intermodal (días)</div><div class="chart-box"><canvas id="g-perm-ldr"></canvas></div><p id="g-perm-ldr-msg" style="display:none;color:#aaa;text-align:center;font-size:12px;padding:12px 0">Registra fechas de llegada para ver permanencias</p></div>
+    <div class="chart-card"><div class="chart-title">Permanencia en Ciénaga por intermodal (días)</div><div class="chart-box"><canvas id="g-perm-cie"></canvas></div><p id="g-perm-cie-msg" style="display:none;color:#aaa;text-align:center;font-size:12px;padding:12px 0">Registra fechas de llegada para ver permanencias</p></div>
+  </div>
+</div>
+
+<!-- ===== REGISTRAR ===== -->
+<div id="tab-registrar" class="tab-content">
+<div class="form-card">
+  <h2>Registrar Viaje de Tren</h2>
+  <p style="color:#888;font-size:11px;margin-bottom:14px">💡 Registra la salida ahora. La llegada la puedes completar después en el Historial cuando el tren arribe.</p>
+  <div class="fgrid">
+    <div class="fg">
+      <label>Corredor *</label>
+      <select id="f-tipo">
+        <option value="CIE-LDR">CIE-LDR — Ciénaga → La Dorada</option>
+        <option value="LDR-CIE">LDR-CIE — La Dorada → Ciénaga</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Fecha y hora de salida *</label>
+      <input type="datetime-local" id="f-fecha" oninput="recalcTransito()">
+    </div>
+    <div class="fg">
+      <label>Fecha y hora de llegada <span style="color:#aaa">(opcional)</span></label>
+      <input type="datetime-local" id="f-llegada" oninput="recalcTransito()">
+    </div>
+    <div class="fg">
+      <label>Tránsito calculado</label>
+      <div class="calc-box" id="f-transito">—</div>
+    </div>
+    <div class="fg">
+      <label>ID / Nombre del tren *</label>
+      <input type="text" id="f-tren" placeholder="Ej: Int 7, Int 8">
+    </div>
+    <div class="fg">
+      <label>¿Es intermodal?</label>
+      <select id="f-intermodal"><option value="1">Sí</option><option value="0">No</option></select>
+    </div>
+    <div class="fg">
+      <label>Descarrilamientos</label>
+      <input type="number" id="f-descarriles" min="0" value="0">
+    </div>
+    <div class="fg" style="grid-column:span 2">
+      <label>Nota de incidentes</label>
+      <input type="text" id="f-notas" placeholder="Ej: descarrilamiento km 45">
+    </div>
+  </div>
+  <div class="fgrid">
+    <div class="fg"><label>Total plataformas *</label><input type="number" id="f-plat-total" min="0" placeholder="0" oninput="recalcForm()"></div>
+    <div class="fg"><label>Plataformas con carga *</label><input type="number" id="f-plat-carga" min="0" placeholder="0" oninput="recalcForm()"></div>
+    <div class="fg"><label>Plataformas vacías</label><div class="calc-box" id="f-plat-vacias">0</div></div>
+    <div class="fg"><label>Total toneladas</label><div class="calc-box" id="f-ton-total">0.0 t</div></div>
+    <div class="fg"><label>Factor de carga</label><div class="calc-box" id="f-factor">0.0 t/plat</div></div>
+  </div>
+  <div>
+    <h3 style="font-size:12px;font-weight:700;color:#1a3a5c;margin-bottom:6px;text-transform:uppercase">Clientes y Carga</h3>
+    <table class="ct">
+      <thead><tr><th style="width:38%">Cliente</th><th style="width:22%">Toneladas</th><th style="width:22%">Plataformas</th><th style="width:18%"></th></tr></thead>
+      <tbody id="clients-body"></tbody>
+    </table>
+    <button class="btn btn-add" onclick="addClientRow()">+ Agregar cliente</button>
+  </div>
+  <div style="margin-top:20px;display:flex;gap:10px">
+    <button class="btn btn-success" onclick="saveTrip()">✓ Guardar Viaje</button>
+    <button class="btn btn-outline" onclick="clearForm()">Limpiar</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== HISTORIAL ===== -->
+<div id="tab-historial" class="tab-content">
+  <div class="fbar">
+    <label>Corredor:</label>
+    <select id="h-tipo" onchange="renderHistorial()">
+      <option value="">Todos</option><option value="CIE-LDR">CIE-LDR</option><option value="LDR-CIE">LDR-CIE</option>
+    </select>
+    <label>Desde:</label><input type="date" id="h-desde" onchange="renderHistorial()">
+    <label>Hasta:</label><input type="date" id="h-hasta" onchange="renderHistorial()">
+    <div class="spacer"></div>
+    <span style="font-size:10px;color:#888">✏ Haz clic en una celda subrayada para editarla</span>
+    <button class="btn btn-danger" onclick="exportCSV()">⬇ Exportar CSV</button>
+    <button class="btn" style="background:#28a745;color:#fff" onclick="document.getElementById('import-input').click()">⬆ Importar CSV</button>
+    <input type="file" id="import-input" accept=".csv" style="display:none" onchange="importCSV(this)">
+    <button class="btn btn-danger" style="background:#6c757d" onclick="clearAll()">Borrar todo</button>
+  </div>
+  <div class="hist-wrap">
+    <table class="ht">
+      <thead><tr>
+        <th>Tren</th><th>Corredor</th>
+        <th>Salida ✏</th><th>Llegada ✏<br><span style="font-weight:400;color:#aac">(editable)</span></th>
+        <th>Tránsito</th><th>Plat.</th><th>Carga</th><th>Vacías</th>
+        <th>Ton.</th><th>Factor</th><th>Clientes</th>
+        <th>Descarr. ✏</th><th>Notas ✏</th><th></th>
+      </tr></thead>
+      <tbody id="hist-body"></tbody>
+    </table>
+  </div>
+</div>
+
+</main>
+
+<!-- ===== SETTINGS MODAL ===== -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:28px;max-width:560px;width:94%;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+    <h2 style="margin-bottom:4px;color:#1a3a5c">⚙ Configuración</h2>
+    <p style="color:#888;font-size:12px;margin-bottom:20px">Conecta con Google Sheets para sincronizar datos entre dispositivos.</p>
+
+    <label style="font-weight:700;font-size:12px;color:#555;display:block;margin-bottom:6px">URL del Web App (Google Apps Script)</label>
+    <input id="gs-url" type="text" placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+      style="width:100%;padding:9px 10px;border:1px solid #ccc;border-radius:5px;font-size:12px;margin-bottom:10px">
+    <p style="font-size:11px;color:#aaa;margin-bottom:20px">Déjalo vacío para usar solo almacenamiento local.</p>
+
+    <details style="margin-bottom:20px;border:1px solid #e0e8f0;border-radius:6px;padding:10px">
+      <summary style="cursor:pointer;font-weight:700;font-size:12px;color:#1a3a5c">📋 Cómo configurar Google Sheets (pasos)</summary>
+      <ol style="font-size:11px;color:#444;margin-top:10px;padding-left:18px;line-height:1.8">
+        <li>Abre <a href="https://sheets.google.com" target="_blank">sheets.google.com</a> y crea una hoja nueva</li>
+        <li>Menú <strong>Extensiones → Apps Script</strong></li>
+        <li>Borra el código existente y pega el código que está abajo</li>
+        <li>Guarda (💾) → <strong>Implementar → Nueva implementación</strong></li>
+        <li>Tipo: <em>Aplicación web</em> · Ejecutar como: <em>Yo</em> · Acceso: <em>Cualquier usuario</em></li>
+        <li>Copia la URL que aparece y pégala arriba</li>
+      </ol>
+      <pre id="apps-script-code" style="background:#f4f4f4;border-radius:4px;padding:10px;font-size:10px;margin-top:10px;overflow-x:auto;white-space:pre-wrap;line-height:1.5"></pre>
+      <button onclick="copyAppsScript()" style="margin-top:8px;padding:5px 14px;background:#1a3a5c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">📋 Copiar código</button>
+    </details>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeSettings()" style="padding:8px 20px;border:1px solid #ccc;background:#fff;border-radius:5px;cursor:pointer">Cancelar</button>
+      <button onclick="saveSettings()" style="padding:8px 20px;background:#1a3a5c;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:700">Guardar y sincronizar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────
+(function migrar(){
+  // Si ya existe v5 → no hacer nada
+  if(localStorage.getItem('tren_v5')) return;
+  const nm={'Int 5':'Int 4','Int 6':'Int 5','Int 7':'Int 6'};
+  const rename=t=>({...t,tren:nm[t.tren]||t.tren});
+  // Migrar desde v4 (con rename de nombres viejos)
+  const v4=JSON.parse(localStorage.getItem('tren_v4')||'[]');
+  if(v4.length){
+    localStorage.setItem('tren_v5',JSON.stringify(v4.map(rename)));
+    return;
+  }
+  // Migrar desde v3/v2
+  const v3=JSON.parse(localStorage.getItem('tren_v3')||localStorage.getItem('tren_v2')||'[]');
+  if(v3.length){
+    const fixed=v3.map(t=>rename({...t,tipo:t.tipo==='IDA'?'CIE-LDR':t.tipo==='RETORNO'?'LDR-CIE':t.tipo}));
+    localStorage.setItem('tren_v5',JSON.stringify(fixed));
+  }
+})();
+
+// ── REPARAR doble-rename aplicado por error (una sola vez) ──
+(function repararNombres(){
+  if(localStorage.getItem('tren_v5r1')) return; // ya corregido
+  localStorage.setItem('tren_v5r1','1');
+  const data=JSON.parse(localStorage.getItem('tren_v5')||'[]');
+  if(!data.length) return;
+  // IDs de DATOS que quedaron renombrados incorrectamente:
+  // id 1005 (CIE-LDR Int 5 → quedó como Int 4), etc.
+  const fix={1005:'Int 5',1006:'Int 6',2005:'Int 5'};
+  let changed=false;
+  data.forEach(t=>{if(fix[t.id]&&t.tren!==fix[t.id]){t.tren=fix[t.id];changed=true;}});
+  if(changed) localStorage.setItem('tren_v5',JSON.stringify(data));
+})();
+
+let trips = JSON.parse(localStorage.getItem('tren_v5') || '[]');
+
+let _cid = 0;
+const COLORS = ['#2a5298','#ff9800','#4caf50','#f44336','#9c27b0','#1e88e5','#795548'];
+const CI = {}; // chart instances
+
+let GSHEET_URL = localStorage.getItem('gsheet_url') || '';
+
+function save() {
+  localStorage.setItem('tren_v5', JSON.stringify(trips));
+  syncToSheet();
+}
+
+// ── GOOGLE SHEETS SYNC ────────────────────────────────────
+async function syncToSheet() {
+  if(!GSHEET_URL) return;
+  setSyncBadge('sync');
+  try {
+    await fetch(GSHEET_URL, {
+      method:'POST',
+      body: JSON.stringify({action:'save', trips})
+    });
+    setSyncBadge('ok');
+  } catch(e) { setSyncBadge('error'); }
+}
+
+async function loadFromSheet() {
+  if(!GSHEET_URL) return false;
+  setSyncBadge('sync');
+  try {
+    const r = await fetch(GSHEET_URL+'?action=get&_='+Date.now());
+    const data = await r.json();
+    if(Array.isArray(data) && data.length > 0) {
+      trips = data;
+      localStorage.setItem('tren_v5', JSON.stringify(trips));
+      setSyncBadge('ok');
+      return true;
+    }
+    setSyncBadge('ok');
+  } catch(e) { setSyncBadge('error'); console.warn('GSheets load error:',e); }
+  return false;
+}
+
+function setSyncBadge(state) {
+  const b = document.getElementById('sync-badge');
+  if(!GSHEET_URL){b.style.display='none';return;}
+  b.style.display='inline';
+  if(state==='ok') b.innerHTML='🟢 Sincronizado';
+  else if(state==='sync') b.innerHTML='🔄 Sincronizando…';
+  else b.innerHTML='🔴 Sin conexión';
+}
+
+// ── SETTINGS MODAL ────────────────────────────────────────
+const APPS_SCRIPT_CODE = `const COLS=['id','tipo','fecha','fechaLlegada','tren','ptotal','pcarga','pvacias','tons','factor','desc','notas','inter','clientes'];
+function getSheet(){const ss=SpreadsheetApp.getActiveSpreadsheet();let sh=ss.getSheetByName('viajes');if(!sh){sh=ss.insertSheet('viajes');sh.appendRow(COLS);}return sh;}
+function doGet(e){const sh=getSheet(),data=sh.getDataRange().getValues();if(data.length<=1)return out([]);const trips=data.slice(1).map(r=>{const t={};COLS.forEach((c,i)=>t[c]=r[i]);try{t.clientes=JSON.parse(t.clientes);}catch(e){t.clientes=[];}['id','ptotal','pcarga','pvacias','tons','factor','desc','inter'].forEach(k=>t[k]=Number(t[k])||0);return t;});return out(trips);}
+function doPost(e){const p=JSON.parse(e.postData.contents);if(p.action==='save'){const sh=getSheet();sh.clearContents();sh.appendRow(COLS);(p.trips||[]).forEach(t=>sh.appendRow(COLS.map(c=>c==='clientes'?JSON.stringify(t[c]||[]):(t[c]??''))));}return out({ok:true});}
+function out(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}`;
+
+function openSettings() {
+  document.getElementById('settings-modal').style.display='flex';
+  document.getElementById('gs-url').value = GSHEET_URL;
+  document.getElementById('apps-script-code').textContent = APPS_SCRIPT_CODE;
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display='none';
+}
+function saveSettings() {
+  GSHEET_URL = document.getElementById('gs-url').value.trim();
+  localStorage.setItem('gsheet_url', GSHEET_URL);
+  closeSettings();
+  setSyncBadge(GSHEET_URL?'sync':'ok');
+  if(GSHEET_URL) loadFromSheet().then(ok=>{if(ok){renderDashboard();renderHistorial();renderGraficos();}});
+}
+function copyAppsScript() {
+  navigator.clipboard.writeText(APPS_SCRIPT_CODE).then(()=>alert('✓ Código copiado al portapapeles'));
+}
+
+// ── IMPORTAR CSV ──────────────────────────────────────────
+function importCSV(input) {
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const lines=e.target.result.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2){alert('El archivo CSV está vacío');return;}
+    const headers=lines[0].split(';');
+    const imported=[];
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(';');
+      const row={};headers.forEach((h,j)=>row[h]=(cols[j]||'').trim());
+      const clientes=(row.Clientes||'').split('|').filter(Boolean).map(c=>{
+        const m=c.match(/^(.+):(\d[\d.]*)t?$/);
+        return m?{nombre:m[1].trim(),toneladas:parseFloat(m[2])||0,plataformas:0}:{nombre:c,toneladas:0,plataformas:0};
+      });
+      const t={
+        id: parseInt(row.id)||Date.now()+i,
+        tipo: row.Corredor||'CIE-LDR',
+        fecha: row.Salida||'',
+        fechaLlegada: row.Llegada||'',
+        tren: row.Tren||'',
+        ptotal: +row.Plat_Total||0,
+        pcarga: +row.Con_Carga||0,
+        pvacias: +row.Vacias||0,
+        tons: parseFloat(row.Toneladas)||0,
+        factor: parseFloat(row.Factor)||0,
+        desc: +row.Descarr||0,
+        notas: row.Notas||'',
+        inter: 1,
+        clientes
+      };
+      if(t.tren&&t.fecha) imported.push(t);
+    }
+    if(!imported.length){alert('No se encontraron registros válidos. Verifica que el CSV fue exportado desde esta app.');return;}
+    if(!confirm(`¿Importar ${imported.length} viajes?\n\nEsto reemplazará TODOS los datos actuales.`)){return;}
+    trips=imported;
+    save();
+    renderDashboard();renderHistorial();renderGraficos();
+    alert(`✓ ${imported.length} viajes importados correctamente`);
+  };
+  reader.readAsText(file,'utf-8');
+  input.value='';
+}
+
+// ── NAV ───────────────────────────────────────────────────
+function showTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  el.classList.add('active');
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'graficos')  renderGraficos();
+  if (tab === 'historial') renderHistorial();
+}
+
+// ── FORM ──────────────────────────────────────────────────
+function recalcTransito() {
+  const sal = document.getElementById('f-fecha').value;
+  const lle = document.getElementById('f-llegada').value;
+  document.getElementById('f-transito').textContent =
+    sal && lle && lle > sal ? daysBetween(sal,lle).toFixed(2)+' d' : '—';
+}
+
+function recalcForm() {
+  const total = +document.getElementById('f-plat-total').value||0;
+  const carga = +document.getElementById('f-plat-carga').value||0;
+  document.getElementById('f-plat-vacias').textContent = Math.max(0,total-carga);
+  let tons=0;
+  document.querySelectorAll('#clients-body tr').forEach(r=>{ tons+=(+r.querySelectorAll('input')[1].value)||0; });
+  document.getElementById('f-ton-total').textContent = tons.toFixed(1)+' t';
+  document.getElementById('f-factor').textContent = (carga>0?(tons/carga).toFixed(1):'0.0')+' t/plat';
+}
+
+function addClientRow(n='',t='',p='') {
+  const id=++_cid, tr=document.createElement('tr'); tr.id='cr-'+id;
+  tr.innerHTML=`<td><input type="text" placeholder="Cliente" value="${n}" oninput="recalcForm()"></td>
+    <td><input type="number" placeholder="0" step="0.1" value="${t}" oninput="recalcForm()"></td>
+    <td><input type="number" placeholder="0" value="${p}" oninput="recalcForm()"></td>
+    <td><button class="btn btn-danger" onclick="document.getElementById('cr-${id}').remove();recalcForm()">✕</button></td>`;
+  document.getElementById('clients-body').appendChild(tr);
+  recalcForm();
+}
+
+function getClients() {
+  return Array.from(document.querySelectorAll('#clients-body tr')).map(r=>{
+    const i=r.querySelectorAll('input');
+    return {nombre:i[0].value.trim(),toneladas:+i[1].value||0,plataformas:+i[2].value||0};
+  }).filter(c=>c.nombre);
+}
+
+function saveTrip() {
+  const tipo=document.getElementById('f-tipo').value;
+  const fecha=document.getElementById('f-fecha').value;
+  const llegada=document.getElementById('f-llegada').value;
+  const tren=document.getElementById('f-tren').value.trim();
+  const ptotal=+document.getElementById('f-plat-total').value||0;
+  const pcarga=+document.getElementById('f-plat-carga').value||0;
+  const desc=+document.getElementById('f-descarriles').value||0;
+  const notas=document.getElementById('f-notas').value.trim();
+  const inter=+document.getElementById('f-intermodal').value;
+  const clientes=getClients();
+  if(!fecha)return alert('Ingresa la fecha y hora de salida.');
+  if(!tren)return alert('Ingresa el nombre del tren.');
+  if(ptotal<1)return alert('Ingresa el número de plataformas.');
+  const tons=clientes.reduce((s,c)=>s+c.toneladas,0);
+  trips.push({id:Date.now(),tipo,fecha,fechaLlegada:llegada,tren,ptotal,pcarga,
+    pvacias:Math.max(0,ptotal-pcarga),tons,factor:pcarga>0?tons/pcarga:0,desc,notas,inter,clientes});
+  save();
+  clearForm();
+  setFilterAll();        // expande fechas para incluir el nuevo tren
+  renderHistorial();     // actualiza historial
+  // navega al dashboard para que el usuario vea los KPIs actualizados
+  const btnDash = document.querySelector('nav button');
+  showTab('dashboard', btnDash);
+  btnDash.classList.add('active');
+  alert(`Viaje "${tren}" (${tipo}) guardado.`);
+}
+
+function clearForm() {
+  ['f-fecha','f-llegada','f-tren','f-notas'].forEach(id=>document.getElementById(id).value='');
+  ['f-plat-total','f-plat-carga'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-descarriles').value='0';
+  document.getElementById('f-intermodal').value='1';
+  document.getElementById('f-plat-vacias').textContent='0';
+  document.getElementById('f-transito').textContent='—';
+  document.getElementById('clients-body').innerHTML='';
+  recalcForm(); _cid=0;
+}
+
+// ── HISTORIAL ─────────────────────────────────────────────
+function renderHistorial() {
+  const tipo=document.getElementById('h-tipo').value;
+  const desde=document.getElementById('h-desde').value;
+  const hasta=document.getElementById('h-hasta').value;
+  const data=trips.filter(t=>(!tipo||t.tipo===tipo)&&(!desde||t.fecha.substring(0,10)>=desde)&&(!hasta||t.fecha.substring(0,10)<=hasta))
+    .sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const tbody=document.getElementById('hist-body');
+  if(!data.length){tbody.innerHTML=`<tr><td colspan="14" class="no-data">Sin registros</td></tr>`;return;}
+  tbody.innerHTML=data.map(t=>{
+    const tran=t.fechaLlegada&&t.fechaLlegada>t.fecha?daysBetween(t.fecha,t.fechaLlegada).toFixed(2)+'d':'—';
+    return `<tr>
+      <td><strong>${t.tren}</strong></td>
+      <td><span class="badge badge-${t.tipo}">${t.tipo}</span></td>
+      <td class="editable" onclick="editCell(this,${t.id},'fecha','datetime-local')" title="Clic para editar">${fmtDT(t.fecha)}</td>
+      <td class="editable" onclick="editCell(this,${t.id},'fechaLlegada','datetime-local')" title="Clic para editar llegada">${t.fechaLlegada?fmtDT(t.fechaLlegada):'<span style="color:#aaa">— editar</span>'}</td>
+      <td style="text-align:center">${tran}</td>
+      <td style="text-align:center">${t.ptotal}</td>
+      <td style="text-align:center">${t.pcarga}</td>
+      <td style="text-align:center;color:${t.pvacias>0?'#c00':'#00B050'}">${t.pvacias}</td>
+      <td style="text-align:right">${t.tons.toFixed(1)}</td>
+      <td style="text-align:right">${t.factor.toFixed(1)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px"
+        title="${t.clientes.map(c=>c.nombre+':'+c.toneladas+'t').join(', ')}">${t.clientes.map(c=>c.nombre).join(', ')||'—'}</td>
+      <td class="editable" style="text-align:center;color:${t.desc>0?'#c00':'#333'}" onclick="editCell(this,${t.id},'desc','number')" title="Clic para editar">${t.desc>0?'⚠ '+t.desc:'0'}</td>
+      <td class="editable" style="font-size:10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="editCell(this,${t.id},'notas','text')" title="${t.notas||'Clic para agregar nota'}">${t.notas||'<span style="color:#aaa">— agregar</span>'}</td>
+      <td><button class="btn btn-danger" onclick="delTrip(${t.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function editCell(cell, id, field, type) {
+  const t=trips.find(x=>x.id===id); if(!t)return;
+  const val=t[field]||'';
+  if(type==='datetime-local'){
+    const uid=`ei_${id}_${field}`;
+    cell.innerHTML=`<div style="display:flex;align-items:center;gap:3px">
+      <input type="datetime-local" id="${uid}" class="edit-input" value="${val}" style="width:170px"
+        onkeydown="if(event.key==='Enter'){saveField(${id},'${field}',this.value,'datetime-local');}if(event.key==='Escape'){renderHistorial();}">
+      <button onclick="saveField(${id},'${field}',document.getElementById('${uid}').value,'datetime-local')"
+        style="padding:2px 8px;background:#1a3a5c;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px;flex-shrink:0">✓</button>
+    </div>`;
+  } else {
+    const w=type==='text'?'180px':'60px';
+    cell.innerHTML=`<input type="${type}" class="edit-input" value="${val}" style="width:${w}"
+      onblur="saveField(${id},'${field}',this.value,'${type}')"
+      onkeydown="if(event.key==='Enter'||event.key==='Escape')this.blur()">`;
+  }
+  cell.querySelector('input').focus();
+}
+
+function saveField(id, field, value, type) {
+  const t=trips.find(x=>x.id===id); if(!t)return;
+  if(type==='number') t[field]=+value||0;
+  else t[field]=value;
+  save();
+  setFilterAll();
+  renderHistorial();
+  renderDashboard();   // actualiza KPIs al editar llegada, descarr. o notas
+}
+
+function delTrip(id){
+  if(!confirm('¿Eliminar este viaje?'))return;
+  trips=trips.filter(t=>t.id!==id);
+  save(); setFilterAll(); renderHistorial(); renderDashboard();
+}
+function clearAll(){
+  if(!confirm('¿Borrar TODOS los registros?'))return;
+  trips=[]; save(); setFilterAll(); renderHistorial(); renderDashboard();
+}
+
+function exportCSV() {
+  const h=['Tren','Corredor','Salida','Llegada','Transito_d','Plat_Total','Con_Carga','Vacias','Toneladas','Factor','Descarr','Notas','Clientes'];
+  const r=trips.map(t=>[t.tren,t.tipo,t.fecha,t.fechaLlegada||'',
+    t.fechaLlegada?daysBetween(t.fecha,t.fechaLlegada).toFixed(2):'',
+    t.ptotal,t.pcarga,t.pvacias,t.tons.toFixed(1),t.factor.toFixed(2),t.desc,t.notas||'',
+    t.clientes.map(c=>c.nombre+':'+c.toneladas+'t').join('|')]);
+  const csv=[h,...r].map(x=>x.join(';')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);a.download='tren.csv';a.click();
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────
+function setFilterAll() {
+  const s=[...trips].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  if(s.length){
+    document.getElementById('d-desde').value=s[0].fecha.substring(0,10);
+    const allEnd=[...trips].flatMap(t=>[t.fecha,t.fechaLlegada].filter(Boolean)).sort();
+    document.getElementById('d-hasta').value=allEnd.pop().substring(0,10);
+  }
+  renderDashboard();
+}
+
+function filteredTrips(){
+  const desde=document.getElementById('d-desde').value, hasta=document.getElementById('d-hasta').value;
+  return trips.filter(t=>(!desde||t.fecha.substring(0,10)>=desde)&&(!hasta||t.fecha.substring(0,10)<=hasta));
+}
+
+function renderDashboard() {
+  try {
+  const mob=window.innerWidth<768;
+  const all=filteredTrips();
+  const cias=all.filter(t=>t.tipo==='CIE-LDR'), ldrs=all.filter(t=>t.tipo==='LDR-CIE');
+
+  const platCIET=sum(cias,'ptotal'),platCIEC=sum(cias,'pcarga'),platCIEV=sum(cias,'pvacias');
+  const platLDRT=sum(ldrs,'ptotal'),platLDRC=sum(ldrs,'pcarga'),platLDRV=sum(ldrs,'pvacias');
+  const tonCIE=sum(cias,'tons'),tonLDR=sum(ldrs,'tons');
+
+  const backhaul=tonCIE>0?tonLDR/tonCIE*100:0;
+  const utilLDR=platLDRT>0?platLDRC/platLDRT*100:0;
+  const utilCIE=platCIET>0?platCIEC/platCIET*100:0;
+  const factorCIE=platCIEC>0?tonCIE/platCIEC:0;
+  const factorLDR=platLDRC>0?tonLDR/platLDRC:0;
+  const descarriles=sum(all,'desc');
+  const intermodales=all.filter(t=>t.inter).length;
+
+  // Periodo usando fecha + llegada
+  const allDates=all.flatMap(t=>[t.fecha,t.fechaLlegada].filter(Boolean)).sort();
+  const periodo=allDates.length>=2?daysBetween(allDates[0],allDates[allDates.length-1]):0;
+
+  // Ciclo completo = intervalo entre salidas CIE-LDR consecutivas
+  // = tránsito ida + perm. La Dorada + tránsito vuelta + perm. Ciénaga
+  const ciasS=cias.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  // Ciclo completo = pareja Int-N (CIE-LDR + LDR-CIE con mismo nombre de tren)
+  const nCiclosCompletos=ciasS.filter(c=>ldrs.some(l=>l.tren===c.tren&&l.fechaLlegada)).length;
+  const cicloEnCurso=!!ciasS.find(c=>!ldrs.some(l=>l.tren===c.tren));
+  const totalCycles=nCiclosCompletos+(cicloEnCurso?1:0);
+  // Promedio = período total / número de trenes (throughput: 81.3 d / 6 = 13.55 d)
+  const avgCiclo=periodo>0&&cias.length>0?periodo/cias.length:0;
+  // Variabilidad = intervalos entre salidas CIE-LDR consecutivas
+  const intervalCycles=[];
+  for(let i=1;i<ciasS.length;i++) intervalCycles.push(daysBetween(ciasS[i-1].fecha,ciasS[i].fecha));
+  const minCiclo=intervalCycles.length?Math.min(...intervalCycles):0;
+  const maxCiclo=intervalCycles.length?Math.max(...intervalCycles):0;
+
+  const metaCiclo=+document.getElementById('meta-ciclo').value||7;
+  const metaTrenes=+document.getElementById('meta-trenes').value||4;
+  const brechaVsMeta=avgCiclo>0?(avgCiclo-metaCiclo)/metaCiclo*100:0;
+  const trenesMes=periodo>0&&cias.length>0?cias.length/(periodo/30):0;
+
+  // Permanencias y tránsitos
+  const permLDR=calcPermLDR(cias,ldrs);
+  const permCIE=calcPermCIE(ldrs,cias);
+  const tranCIE=cias.filter(t=>t.fechaLlegada&&t.fechaLlegada>t.fecha).map(t=>daysBetween(t.fecha,t.fechaLlegada));
+  const tranLDR=ldrs.filter(t=>t.fechaLlegada&&t.fechaLlegada>t.fecha).map(t=>daysBetween(t.fecha,t.fechaLlegada));
+  const avgPermLDR=permLDR.length?permLDR.reduce((a,b)=>a+b.days,0)/permLDR.length:0;
+  const permCIEcomp=permCIE.filter(x=>!x.enCurso);
+  const avgPermCIE=permCIEcomp.length?permCIEcomp.reduce((a,b)=>a+b.days,0)/permCIEcomp.length:0;
+  const avgTranCIE=tranCIE.length?tranCIE.reduce((a,b)=>a+b,0)/tranCIE.length:0;
+  const avgTranLDR=tranLDR.length?tranLDR.reduce((a,b)=>a+b,0)/tranLDR.length:0;
+
+  // Desglose por pareja: ciclo cierra al llegar a Ciénaga (TC + PL + TL)
+  // Permanencia Ciénaga = tiempo entre llegada LDR-CIE y siguiente salida CIE-LDR (prep. entre ciclos)
+  let dTC=0,dPL=0,dTL=0,dPC=0,nDes=0,nPC=0;
+  ciasS.forEach((c,i)=>{
+    if(!c.fechaLlegada) return;
+    const l=ldrs.find(t=>t.tren===c.tren&&t.fechaLlegada);
+    if(!l) return;
+    dTC+=daysBetween(c.fecha,c.fechaLlegada);        // tránsito CIE→LDR
+    dPL+=daysBetween(c.fechaLlegada,l.fecha);         // permanencia La Dorada
+    dTL+=daysBetween(l.fecha,l.fechaLlegada);         // tránsito LDR→CIE
+    const cNext=ciasS[i+1];
+    if(cNext){dPC+=daysBetween(l.fechaLlegada,cNext.fecha);nPC++;}
+    nDes++;
+  });
+  const avgTC=nDes?dTC/nDes:0;
+  const avgPL=nDes?dPL/nDes:0;
+  const avgTL=nDes?dTL/nDes:0;
+  const avgPC=nPC?dPC/nPC:0;
+
+  // Participación
+  const mapCIE=buildClientMap(cias),mapLDR=buildClientMap(ldrs);
+  const partCIE=mapToArr(mapCIE,tonCIE).sort((a,b)=>b.pct-a.pct);
+  const partLDR=mapToArr(mapLDR,tonLDR).sort((a,b)=>b.pct-a.pct);
+
+  // ROW 1
+  document.getElementById('kpi-r1').style.gridTemplateColumns=mob?'repeat(3,1fr)':'repeat(6,1fr)';
+  document.getElementById('kpi-r1').innerHTML=[
+    kpiCol('BACKHAUL (Ton)',cv(backhaul.toFixed(1)+'%',backhaul>=90?'green':backhaul>=60?'orange':'red'),`${tonLDR.toFixed(0)} / ${tonCIE.toFixed(0)} t`),
+    kpiCol('UTILIZACIÓN LDR-CIE (Plat.)',cv(utilLDR.toFixed(1)+'%',utilLDR>=90?'green':utilLDR>=70?'orange':'red'),`${platLDRC} de ${platLDRT} plat. con carga`),
+    kpiCol('FACTOR CARGA CIE-LDR',cv(factorCIE.toFixed(1)+' t/plat','blue'),`${platCIEC} plat · ${tonCIE.toFixed(0)} t`),
+    kpiCol('FACTOR CARGA LDR-CIE',cv(factorLDR.toFixed(1)+' t/plat',factorLDR>=factorCIE*.8?'orange':'red'),`${platLDRC} plat (carga) · ${tonLDR.toFixed(0)} t`),
+    kpiCol('PERIODO ANALIZADO',cv(periodo.toFixed(1)+' días','blue'),'Salida más temprana → Última llegada'),
+    kpiCol('INTERMODALES',cv(intermodales,'blue'),''),
+  ].join('');
+
+  // ROW 2
+  const descNote=all.filter(t=>t.desc>0).map(t=>`${t.tren} (${fmtDT(t.fecha).substring(0,10)})`).join(', ');
+  // Participación combinada (ambos corredores)
+  const tonTotal=tonCIE+tonLDR;
+  const mapTOT=buildClientMap([...cias,...ldrs]);
+  const partTOT=mapToArr(mapTOT,tonTotal).sort((a,b)=>b.pct-a.pct);
+  const partPanel=`<div class="part-panel">
+    <div style="font-size:10px;font-weight:700;color:#1a3a5c;margin-bottom:4px">Total: ${tonTotal.toFixed(0)} t transportadas</div>
+    <table>
+      <tr style="font-size:9px;color:#888"><td>Cliente</td><td style="text-align:right">%</td><td style="text-align:right">Ton.</td></tr>
+      ${partTOT.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;font-weight:700">${c.pct.toFixed(1)}%</td><td style="text-align:right;color:#555">${(+c.ton||0).toFixed(0)}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#aaa">Sin datos</td></tr>'}
+    </table>
+    <div class="ph" style="margin:6px -8px 3px;padding:2px 8px">CIE-LDR — ${tonCIE.toFixed(0)} t</div>
+    <table>
+      <tr style="font-size:9px;color:#888"><td>Cliente</td><td style="text-align:right">%</td><td style="text-align:right">Ton.</td></tr>
+      ${partCIE.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;font-weight:700">${c.pct.toFixed(1)}%</td><td style="text-align:right;color:#555">${(+c.ton||0).toFixed(0)}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#aaa">Sin datos</td></tr>'}
+    </table>
+    <div class="ph" style="margin:6px -8px 3px;padding:2px 8px">LDR-CIE — ${tonLDR.toFixed(0)} t</div>
+    <table>
+      <tr style="font-size:9px;color:#888"><td>Cliente</td><td style="text-align:right">%</td><td style="text-align:right">Ton.</td></tr>
+      ${partLDR.map((c,i)=>`<tr class="${i===0&&c.pct>0?'top-ret':''}"><td>${c.nombre}</td><td style="text-align:right;font-weight:700">${c.pct.toFixed(1)}%</td><td style="text-align:right;color:#555">${(+c.ton||0).toFixed(0)}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#aaa">Sin datos</td></tr>'}
+      ${platLDRV>0?`<tr><td>Vacías</td><td style="text-align:right;color:#e65100">${platLDRT>0?(platLDRV/platLDRT*100).toFixed(0):0}%</td><td></td></tr>`:''}
+    </table>
+  </div>`;
+
+  const r2=document.getElementById('kpi-r2');
+  r2.style.gridTemplateColumns=mob?'repeat(2,1fr)':'1fr 1.1fr 1.3fr 1fr 1fr 1.5fr';
+  r2.innerHTML=[
+    kpiCol('TRENES OPERADOS',cv(cias.length+ldrs.length,'blue'),`${cias.length} CIE-LDR + ${ldrs.length} LDR-CIE`),
+    kpiCol('PLAT. CIE-LDR / LDR-CIE',cv(`${platCIET} / ${platLDRT}`,'blue'),`Δ ${platLDRT-platCIET>=0?'+':''}${platLDRT-platCIET} plat`),
+    kpiCol('TONELADAS TOTAL / CIE-LDR / LDR-CIE',cv(tonTotal.toFixed(0),'blue'),`${tonCIE.toFixed(0)} t ida · ${tonLDR.toFixed(0)} t retorno · Backhaul ${backhaul.toFixed(1)}%`),
+    kpiCol('PLAT. VACÍAS LDR-CIE',cv(platLDRV,platLDRV===0?'green':platLDRV<=10?'orange':'red'),`${platLDRT>0?(platLDRV/platLDRT*100).toFixed(1):0}% del total LDR-CIE`),
+    kpiCol('DESCARRILAMIENTOS',cv(descarriles,descarriles===0?'green':'red'),descarriles>0?descNote:'Sin incidentes'),
+    `<div class="kpi-col"><div class="kpi-hdr">% PARTICIPACIÓN POR CLIENTE</div>${partPanel}</div>`,
+  ].join('');
+
+  // ROW 3 — ciclo y metas (sin repetir componentes que van abajo)
+  const bSign=brechaVsMeta>=0?'+':'';
+  document.getElementById('kpi-r3').style.gridTemplateColumns=mob?'repeat(2,1fr)':'repeat(4,1fr)';
+  document.getElementById('kpi-r3').innerHTML=[
+    kpiCol('CICLO COMPLETO',cv(avgCiclo.toFixed(2)+' d',avgCiclo<=metaCiclo?'green':avgCiclo<=metaCiclo*1.5?'orange':'red'),`Prom. de ${nCiclosCompletos} completados${cicloEnCurso?' · 1 en curso':''}`),
+    kpiCol('VARIABILIDAD',cv(`${minCiclo.toFixed(1)} – ${maxCiclo.toFixed(1)} d`,maxCiclo-minCiclo<=5?'green':'orange'),'Más corto y más largo'),
+    kpiCol('BRECHA vs META',cv(bSign+brechaVsMeta.toFixed(0)+'%',brechaVsMeta<=0?'green':brechaVsMeta<=50?'orange':'red'),`Meta ${metaCiclo} d · ${(30/metaCiclo).toFixed(1)} trenes/mes`),
+    kpiCol('TRENES / MES',cv(trenesMes.toFixed(1),trenesMes>=metaTrenes?'green':trenesMes>=metaTrenes*0.7?'orange':'red'),`Meta ${metaTrenes}/mes · ${periodo.toFixed(0)} días de operación`),
+  ].join('');
+
+  // ── DESGLOSE CICLO COMPLETO ──────────────────────────────
+  if(nDes>0){
+    // avgPC_bar: porción de Perm. Ciénaga amortizada por ciclo (deriva de avgCiclo - TC - PL - TL)
+    const avgPC_bar=Math.max(0,avgCiclo-avgTC-avgPL-avgTL);
+    const tot=avgCiclo||1;
+    const pTC=(avgTC/tot*100).toFixed(1);
+    const pPL=(avgPL/tot*100).toFixed(1);
+    const pTL=(avgTL/tot*100).toFixed(1);
+    const pPC=(avgPC_bar/tot*100).toFixed(1);
+    document.getElementById('ciclo-desglose-bar').innerHTML=`
+      <div style="font-size:10px;color:#888;margin-bottom:4px">Desglose del ciclo completo (período total ÷ trenes = ${avgCiclo.toFixed(2)} d)</div>
+      <div style="display:flex;height:26px;border-radius:5px;overflow:hidden;font-size:11px;font-weight:700;color:#fff">
+        <div style="width:${pTC}%;background:#2a5298;display:flex;align-items:center;justify-content:center;min-width:28px" title="Tránsito CIE→LDR">${pTC}%</div>
+        <div style="width:${pPL}%;background:#c0392b;display:flex;align-items:center;justify-content:center;min-width:28px" title="Perm. La Dorada">${pPL}%</div>
+        <div style="width:${pTL}%;background:#1e88e5;display:flex;align-items:center;justify-content:center;min-width:28px" title="Tránsito LDR→CIE">${pTL}%</div>
+        <div style="width:${pPC}%;background:#ff8c00;display:flex;align-items:center;justify-content:center;min-width:28px" title="Perm. Ciénaga">${pPC}%</div>
+      </div>
+      <div style="display:flex;gap:16px;font-size:10px;color:#555;margin-top:4px;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#2a5298;border-radius:2px;margin-right:3px"></span>Tránsito CIE→LDR</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#c0392b;border-radius:2px;margin-right:3px"></span>Permanencia La Dorada</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#1e88e5;border-radius:2px;margin-right:3px"></span>Tránsito LDR→CIE</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#ff8c00;border-radius:2px;margin-right:3px"></span>Permanencia Ciénaga</span>
+      </div>`;
+    document.getElementById('kpi-r4').style.gridTemplateColumns=mob?'repeat(2,1fr)':'repeat(4,1fr)';
+    document.getElementById('kpi-r4').innerHTML=[
+      kpiCol('🔵 TRÁNSITO CIE → LDR', cv(avgTC.toFixed(2)+' d','blue'),   `${pTC}% del ciclo · trayecto ida`),
+      kpiCol('🔴 PERM. LA DORADA',    cv(avgPL.toFixed(2)+' d', avgPL>avgCiclo*0.4?'red':'orange'), `${pPL}% del ciclo · carga y espera`),
+      kpiCol('🔵 TRÁNSITO LDR → CIE', cv(avgTL.toFixed(2)+' d','blue'),   `${pTL}% del ciclo · trayecto retorno`),
+      kpiCol('🟠 PERM. CIÉNAGA',      cv(avgPC_bar.toFixed(2)+' d','orange'), `${pPC}% del ciclo · descarga y nueva carga`),
+    ].join('');
+  } else {
+    document.getElementById('ciclo-desglose-bar').innerHTML='<p style="color:#aaa;font-size:12px;padding:8px 0">Registra fechas de llegada CIE-LDR y LDR-CIE para ver el desglose.</p>';
+    document.getElementById('kpi-r4').innerHTML='';
+  }
+
+  // CAPACIDAD
+  const capRows=[
+    {m:'Factor carga CIE-LDR (t/plat)',act:factorCIE.toFixed(1)+' t/plat',obj:'—',br:'—',ok:null},
+    {m:'Factor carga LDR-CIE (t/plat)',act:factorLDR.toFixed(1)+' t/plat',obj:'—',br:'—',ok:null},
+    {m:'Backhaul (%)',act:backhaul.toFixed(1)+'%',obj:'≥ 90%',br:sign(backhaul-90)+'%',ok:backhaul>=90,note:'Objetivo 90%'},
+    {m:'Utilización LDR-CIE (plataformas)',act:utilLDR.toFixed(1)+'%',obj:'≥ 90%',br:sign(utilLDR-90)+'%',ok:utilLDR>=90,note:`${platLDRV} plat. vacías`},
+    {m:'Ciclo completo (días)',act:avgCiclo.toFixed(2)+' d',obj:metaCiclo+' d',br:sign(avgCiclo-metaCiclo)+' d',ok:avgCiclo<=metaCiclo,note:`${totalCycles} ciclos (${nCiclosCompletos} completados${cicloEnCurso?' · 1 en curso':''})`},
+    {m:'Trenes CIE-LDR / mes',act:trenesMes.toFixed(1),obj:metaTrenes+'/mes',br:sign(trenesMes-metaTrenes),ok:trenesMes>=metaTrenes,note:`Periodo ${periodo.toFixed(1)} días`},
+    {m:'Descarrilamientos',act:descarriles,obj:'0',br:descarriles===0?'—':'+'+descarriles,ok:descarriles===0,note:descarriles>0?descNote:''},
+  ];
+  document.getElementById('cap-body').innerHTML=capRows.map(r=>`<tr>
+    <td>${r.m}</td><td><strong>${r.act}</strong></td><td>${r.obj}</td>
+    <td style="color:${r.ok===null?'#333':r.ok?'#00B050':'#c00'};font-weight:700">${r.br}</td>
+    <td>${r.ok===null?'—':r.ok?'<span style="color:#00B050">✓ OK</span>':'<span style="color:#c00">✗ Atención</span>'}</td>
+    <td style="color:#666;font-size:11px">${r.note||''}</td>
+  </tr>`).join('');
+  } catch(e) {
+    console.error('[renderDashboard ERROR]', e);
+    const r2=document.getElementById('kpi-r2');
+    if(r2) r2.innerHTML=`<div style="grid-column:1/-1;color:#c00;padding:12px;font-size:12px;font-weight:700;background:#fff">
+      ⚠ Error al renderizar el tablero: <code>${e.message}</code><br>
+      <span style="font-weight:400;font-size:11px">Abre la consola (F12 → pestaña Console) para ver el detalle completo.</span>
+    </div>`;
+  }
+}
+
+// ── PERMANENCIAS ──────────────────────────────────────────
+function calcPermLDR(cias, ldrs) {
+  // Para cada CIE-LDR con fechaLlegada, busca el siguiente LDR-CIE que salga después
+  const res=[];
+  const ldrsS=ldrs.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  cias.slice().sort((a,b)=>(a.fechaLlegada||a.fecha).localeCompare(b.fechaLlegada||b.fecha))
+    .forEach(c=>{
+      if(!c.fechaLlegada)return;
+      const next=ldrsS.find(l=>l.fecha>c.fechaLlegada);
+      if(next) res.push({label:c.tren,tren:c.tren,days:daysBetween(c.fechaLlegada,next.fecha)});
+    });
+  return res;
+}
+
+function calcPermCIE(ldrs, cias) {
+  // Para cada LDR-CIE con fechaLlegada (arribo a CIE), busca el siguiente CIE-LDR que salga
+  const res=[];
+  const today=new Date().toISOString().substring(0,16);
+  const ciasS=cias.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  ldrs.slice().sort((a,b)=>(a.fechaLlegada||a.fecha).localeCompare(b.fechaLlegada||b.fecha))
+    .forEach(l=>{
+      if(!l.fechaLlegada)return;
+      const next=ciasS.find(c=>c.fecha>l.fechaLlegada);
+      if(next){
+        // Permanencia completada: etiquetar con el tren que salió después (CIE-LDR)
+        res.push({label:next.tren,tren:next.tren,days:daysBetween(l.fechaLlegada,next.fecha),enCurso:false});
+      } else {
+        // Sin siguiente CIE-LDR → permanencia aún en curso (acumular hasta hoy)
+        res.push({label:'En curso',tren:l.tren,days:daysBetween(l.fechaLlegada,today),enCurso:true});
+      }
+    });
+  return res;
+}
+
+// ── GRÁFICOS ──────────────────────────────────────────────
+function renderGraficos() {
+  // No renderizar si la pestaña está oculta — Chart.js falla en canvas invisible
+  if(!document.getElementById('tab-graficos').classList.contains('active')) return;
+  const all=trips;
+  const cias=all.filter(t=>t.tipo==='CIE-LDR'), ldrs=all.filter(t=>t.tipo==='LDR-CIE');
+  const tonCIE=sum(cias,'tons'), tonLDR=sum(ldrs,'tons');
+  const platCIE=sum(cias,'ptotal'), platLDR=sum(ldrs,'ptotal');
+
+  // Toneladas por tren: todos los CIE-LDR (aunque no tengan retorno aún)
+  const trenesAll=[...new Set(cias.map(t=>t.tren))].sort();
+  const tCIEA=[],tLDRA=[];
+  trenesAll.forEach(tr=>{
+    tCIEA.push(sum(cias.filter(t=>t.tren===tr),'tons'));
+    tLDRA.push(sum(ldrs.filter(t=>t.tren===tr),'tons'));
+  });
+
+  // Backhaul solo para pares (CIE-LDR + retorno LDR-CIE)
+  const bhL=[],bhD=[];
+  trenesAll.forEach(tr=>{
+    const c=cias.filter(t=>t.tren===tr), l=ldrs.filter(t=>t.tren===tr);
+    if(c.length&&l.length){const tC=sum(c,'tons'),tL=sum(l,'tons');bhL.push(tr);bhD.push(tC>0?tL/tC*100:0);}
+  });
+
+  // Permanencias
+  const permLDR=calcPermLDR(cias,ldrs);
+  const permCIE=calcPermCIE(ldrs,cias);
+
+  // Clientes
+  const mCIE=buildClientMap(cias), mLDR=buildClientMap(ldrs);
+
+  const fmtT=v=>v.toLocaleString('es-CO',{maximumFractionDigits:0});
+  makeBar('g-tonaje',['CIE-LDR','LDR-CIE'],[tonCIE,tonLDR],['#2a5298','#ff9800'],'Toneladas',false);
+  makeBar('g-plat',['CIE-LDR','LDR-CIE'],[platCIE,platLDR],['#4caf50','#1e88e5'],'Plataformas',false);
+  makeDoughnut('g-cli-cie',Object.keys(mCIE),Object.values(mCIE),tonCIE);
+  makeDoughnut('g-cli-ldr',Object.keys(mLDR),Object.values(mLDR),tonLDR);
+  const tcie=document.getElementById('title-cli-cie');
+  const tldr=document.getElementById('title-cli-ldr');
+  if(tcie) tcie.textContent=`Composición CIE-LDR por cliente — ${fmtT(tonCIE)} t`;
+  if(tldr) tldr.textContent=`Composición LDR-CIE por cliente — ${fmtT(tonLDR)} t`;
+  makeBar('g-backhaul',bhL,bhD.map(v=>+v.toFixed(1)),bhD.map(v=>v>=90?'#4caf50':v>=60?'#ff9800':'#f44336'),'Backhaul %',true);
+  makeGroupedBar('g-ton-tren',trenesAll,tCIEA,tLDRA);
+  const msgLDR=document.getElementById('g-perm-ldr-msg');
+  const msgCIE=document.getElementById('g-perm-cie-msg');
+  if(permLDR.length){
+    msgLDR.style.display='none';
+    makeLine('g-perm-ldr',permLDR.map(x=>x.label),permLDR.map(x=>+x.days.toFixed(2)),'Días en La Dorada','#1a3a5c');
+  } else {
+    destroyChart('g-perm-ldr');
+    msgLDR.style.display='block';
+  }
+  if(permCIE.length){
+    msgCIE.style.display='none';
+    makeLineEnCurso('g-perm-cie',
+      permCIE.map(x=>x.label),
+      permCIE.map(x=>+x.days.toFixed(2)),
+      permCIE.map(x=>!!x.enCurso),
+      'Días en Ciénaga','#ff8c00');
+  } else {
+    destroyChart('g-perm-cie');
+    msgCIE.style.display='block';
+  }
+}
+
+function destroyChart(id){
+  if(CI[id]){CI[id].destroy();delete CI[id];}
+  // Reemplazar el canvas para evitar estado corrupto entre renders
+  const old=document.getElementById(id);
+  if(old){const n=document.createElement('canvas');n.id=id;old.parentNode.replaceChild(n,old);}
+}
+
+function makeBar(cid,labels,data,colors,label,pct){
+  destroyChart(cid);
+  CI[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'bar',
+    data:{labels,datasets:[{label,data,backgroundColor:colors}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,max:pct?100:undefined,ticks:{callback:v=>pct?v+'%':v.toLocaleString()}}}}});
+}
+
+function makeGroupedBar(cid,labels,dCIE,dLDR){
+  destroyChart(cid);
+  CI[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'bar',
+    data:{labels,datasets:[{label:'CIE-LDR',data:dCIE,backgroundColor:'#2a5298'},{label:'LDR-CIE',data:dLDR,backgroundColor:'#ff9800'}]},
+    options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
+}
+
+function makeDoughnut(cid,labels,data,total){
+  destroyChart(cid);
+  const tot=total||data.reduce((a,b)=>a+b,0)||1;
+  const labelsConPct=labels.map((l,i)=>`${l}  ${(data[i]/tot*100).toFixed(1)}%`);
+  CI[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'doughnut',
+    data:{labels:labelsConPct,datasets:[{data,backgroundColor:COLORS}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'right',labels:{font:{size:11},padding:10}},
+        tooltip:{callbacks:{label:ctx=>{
+          const v=ctx.parsed;
+          const pct=(v/tot*100).toFixed(1);
+          return ` ${v.toLocaleString('es-CO',{maximumFractionDigits:0})} t — ${pct}%`;
+        }}}
+      }
+    }
+  });
+}
+
+function makeLine(cid,labels,data,label,color){
+  destroyChart(cid);
+  CI[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'line',
+    data:{labels,datasets:[{label,data,borderColor:color,backgroundColor:color+'22',borderWidth:3,fill:true,tension:.4,
+      pointBackgroundColor:color,pointBorderColor:'#fff',pointBorderWidth:2,pointRadius:7}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y.toFixed(2)+' d'}}},
+      scales:{y:{beginAtZero:true,title:{display:true,text:'Días'}}}}});
+}
+
+// Variante con soporte para punto "en curso" (círculo abierto + segmento punteado)
+function makeLineEnCurso(cid,labels,data,enCursoArr,label,color){
+  destroyChart(cid);
+  const pBg  =data.map((_,i)=>enCursoArr[i]?'#fff':color);
+  const pBord =data.map((_,i)=>enCursoArr[i]?color:'#fff');
+  const pBordW=data.map((_,i)=>enCursoArr[i]?3:2);
+  CI[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'line',
+    data:{labels,datasets:[{label,data,borderColor:color,backgroundColor:color+'22',borderWidth:3,fill:true,tension:.4,
+      pointBackgroundColor:pBg,pointBorderColor:pBord,pointBorderWidth:pBordW,pointRadius:7,
+      segment:{borderDash:ctx=>enCursoArr[ctx.p1DataIndex]?[7,4]:[]}}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y.toFixed(2)+' d'+(enCursoArr[ctx.dataIndex]?' ↻ en curso (hasta hoy)':'')}}},
+      scales:{y:{beginAtZero:true,title:{display:true,text:'Días'}}}}});
+}
+
+// ── HELPERS ───────────────────────────────────────────────
+function sum(arr,key){return arr.reduce((s,t)=>s+(+t[key]||0),0);}
+function daysBetween(a,b){return(new Date(b)-new Date(a))/86400000;}
+function fmtDT(d){
+  if(!d)return'—';
+  const dt=new Date(d);
+  const dd=String(dt.getDate()).padStart(2,'0'), mm=String(dt.getMonth()+1).padStart(2,'0'), yy=dt.getFullYear();
+  if(d.includes('T')&&d.length>10){
+    const hh=String(dt.getHours()).padStart(2,'0'), mi=String(dt.getMinutes()).padStart(2,'0');
+    return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+  }
+  return `${dd}/${mm}/${yy}`;
+}
+function sign(n){return(n>=0?'+':'')+n.toFixed(1);}
+function buildClientMap(arr){const m={};arr.forEach(t=>(t.clientes||[]).forEach(c=>{if(c&&c.nombre)m[c.nombre]=(m[c.nombre]||0)+(parseFloat(c.toneladas)||0);}));return m;}
+function mapToArr(m,total){return Object.entries(m).map(([nombre,ton])=>({nombre,ton,pct:total>0?ton/total*100:0}));}
+function cv(val,cls){return`<span class="${cls}">${val}</span>`;}
+function kpiCol(hdr,valHtml,sub){return`<div class="kpi-col"><div class="kpi-hdr">${hdr}</div><div class="kpi-cell"><div class="kpi-val">${valHtml}</div><div class="kpi-sub">${sub}&nbsp;</div></div></div>`;}
+
+// ── DATOS INICIALES CON HORAS EXACTAS ─────────────────────
+const DATOS = [
+  {id:1001,tipo:'CIE-LDR',fecha:'2026-03-03T20:19',fechaLlegada:'2026-03-05T03:00',tren:'Int 1',ptotal:37,pcarga:37,pvacias:0,tons:1183.76,factor:31.99,desc:0,notas:'',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:681.36,plataformas:20},{nombre:'Ternium (Varilla)',toneladas:327.36,plataformas:10},{nombre:'Diaco (Palanquilla)',toneladas:167.04,plataformas:5},{nombre:'Transferport (Estibas)',toneladas:8,plataformas:2}]},
+  {id:1002,tipo:'CIE-LDR',fecha:'2026-03-17T15:38',fechaLlegada:'2026-03-18T18:18',tren:'Int 2',ptotal:35,pcarga:35,pvacias:0,tons:1167.31,factor:33.35,desc:0,notas:'',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:510,plataformas:15},{nombre:'Ternium (Varilla)',toneladas:435.22,plataformas:14},{nombre:'Diaco (Palanquilla)',toneladas:222.09,plataformas:6}]},
+  {id:1003,tipo:'CIE-LDR',fecha:'2026-03-29T14:02',fechaLlegada:'2026-03-30T12:50',tren:'Int 3',ptotal:29,pcarga:29,pvacias:0,tons:964.87,factor:33.27,desc:0,notas:'',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:541.31,plataformas:16},{nombre:'Ternium (Varilla)',toneladas:280.45,plataformas:9},{nombre:'Diaco (Palanquilla)',toneladas:143.11,plataformas:4}]},
+  {id:1004,tipo:'CIE-LDR',fecha:'2026-04-19T07:20',fechaLlegada:'2026-04-20T18:55',tren:'Int 4',ptotal:33,pcarga:33,pvacias:0,tons:1092.75,factor:33.11,desc:0,notas:'',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:135.12,plataformas:4},{nombre:'Ternium (Varilla)',toneladas:634.07,plataformas:19},{nombre:'Diaco (Palanquilla)',toneladas:323.56,plataformas:10}]},
+  {id:1005,tipo:'CIE-LDR',fecha:'2026-05-06T13:00',fechaLlegada:'2026-05-07T10:55',tren:'Int 5',ptotal:33,pcarga:33,pvacias:0,tons:984.13,factor:29.82,desc:0,notas:'Despacho 5-may. Carpado 33/33.',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:169.18,plataformas:5},{nombre:'Ternium (Varilla)',toneladas:447.83,plataformas:14},{nombre:'Diaco (Palanquilla)',toneladas:136.44,plataformas:4},{nombre:'Postobón',toneladas:230.68,plataformas:10}]},
+  {id:1006,tipo:'CIE-LDR',fecha:'2026-05-14T19:48',fechaLlegada:'2026-05-16T06:20',tren:'Int 6',ptotal:32,pcarga:31,pvacias:1,tons:980.24,factor:31.62,desc:0,notas:'',inter:1,clientes:[{nombre:'GNL (Papel)',toneladas:475.63,plataformas:14},{nombre:'Ternium (Varilla)',toneladas:429.78,plataformas:13},{nombre:'Postobón',toneladas:74.83,plataformas:4}]},
+  {id:2001,tipo:'LDR-CIE',fecha:'2026-03-11T10:30',fechaLlegada:'2026-03-13T01:13',tren:'Int 1',ptotal:36,pcarga:33,pvacias:3,tons:916.8,factor:27.78,desc:0,notas:'',inter:1,clientes:[{nombre:'Postobón',toneladas:712.8,plataformas:12},{nombre:'Bavaria',toneladas:204,plataformas:21}]},
+  {id:2002,tipo:'LDR-CIE',fecha:'2026-03-24T00:50',fechaLlegada:'2026-03-25T20:35',tren:'Int 2',ptotal:29,pcarga:29,pvacias:0,tons:734.902,factor:25.34,desc:1,notas:'Descarrilamiento 24-mar',inter:1,clientes:[{nombre:'Postobón',toneladas:470.902,plataformas:16},{nombre:'Bavaria',toneladas:264,plataformas:13}]},
+  {id:2003,tipo:'LDR-CIE',fecha:'2026-04-11T20:15',fechaLlegada:'2026-04-13T01:15',tren:'Int 3',ptotal:33,pcarga:23,pvacias:10,tons:611.107,factor:26.57,desc:0,notas:'Permanencia La Dorada elevada (12,3 d)',inter:1,clientes:[{nombre:'Postobón',toneladas:611.107,plataformas:23}]},
+  {id:2004,tipo:'LDR-CIE',fecha:'2026-04-26T00:55',fechaLlegada:'2026-04-27T14:55',tren:'Int 4',ptotal:33,pcarga:31,pvacias:2,tons:685.7,factor:22.12,desc:0,notas:'',inter:1,clientes:[{nombre:'Postobón',toneladas:414.98,plataformas:15},{nombre:'Bavaria',toneladas:270.72,plataformas:16}]},
+  {id:2005,tipo:'LDR-CIE',fecha:'2026-05-09T22:55',fechaLlegada:'2026-05-10T21:25',tren:'Int 5',ptotal:33,pcarga:30,pvacias:3,tons:601.11,factor:20.04,desc:0,notas:'1 plataforma en Puerto Berrio y 2 vacías por falta de carga',inter:1,clientes:[{nombre:'Postobón',toneladas:395.99,plataformas:18},{nombre:'Bavaria',toneladas:205.12,plataformas:12}]},
+  {id:2006,tipo:'LDR-CIE',fecha:'2026-05-22T17:30',fechaLlegada:'2026-05-24T02:48',tren:'Int 6',ptotal:32,pcarga:30,pvacias:2,tons:646.708,factor:21.56,desc:0,notas:'',inter:1,clientes:[{nombre:'Postobón',toneladas:477.508,plataformas:22},{nombre:'Bavaria',toneladas:169.2,plataformas:8}]}
+];
+
+// ── INIT ──────────────────────────────────────────────────
+window.onload = async () => {
+  // Fusionar DATOS con lo que hay en localStorage:
+  // - Si localStorage está vacío → cargar DATOS completo
+  // - Si ya tiene datos → agregar solo los registros de DATOS que NO estén ya (por id)
+  // Así, cuando se actualiza DATOS en el HTML, los nuevos viajes aparecen automáticamente
+  const existingIds = new Set(trips.map(t => t.id));
+  const nuevos = DATOS.filter(d => !existingIds.has(d.id));
+  if (trips.length === 0) {
+    trips = DATOS;
+    save();
+  } else if (nuevos.length > 0) {
+    trips = [...trips, ...nuevos].sort((a,b) => a.fecha.localeCompare(b.fecha));
+    save();
+    console.log('✅ ' + nuevos.length + ' viaje(s) nuevo(s) cargado(s) desde DATOS:', nuevos.map(t=>t.tren+' '+t.tipo));
+  }
+
+  setSyncBadge(GSHEET_URL?'sync':'ok');
+  const fromSheet = await loadFromSheet();
+  if(fromSheet){renderDashboard();renderHistorial();}
+  const now=new Date().toISOString().substring(0,16);
+  document.getElementById('f-fecha').value=now;
+  setFilterAll();
+};
+
+// Re-render KPI grids when screen rotates or window resizes
+let _resizeTm;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTm);
+  _resizeTm = setTimeout(() => { renderDashboard(); }, 250);
+});
+</script>
+</body>
+</html>

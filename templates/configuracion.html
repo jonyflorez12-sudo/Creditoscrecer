@@ -54,6 +54,27 @@
   </form>
 </div>
 
+<div class="card" style="max-width:520px; border:1px solid var(--accent);">
+  <h2>WhatsApp y cobro de mora</h2>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label>Número de WhatsApp empresarial</label>
+    <p style="color:var(--muted); font-size:12px; margin:0 0 6px;">
+      Solo dígitos con código de país, sin espacios ni guiones. Ej: <code>573001234567</code>
+    </p>
+    <input type="text" name="whatsapp_numero" placeholder="573001234567" value="{{ config.whatsapp_numero }}">
+
+    <label>Tasa de mora diaria (%)</label>
+    <p style="color:var(--muted); font-size:12px; margin:0 0 6px;">
+      Porcentaje de interés diario sobre la cuota vencida. Ej: <code>0.02</code> = 2% por día.
+    </p>
+    <input type="text" name="tasa_mora_diaria" placeholder="0.02" value="{{ config.tasa_mora_diaria }}">
+
+    <button type="submit">Guardar</button>
+  </form>
+</div>
+
 <div class="card" style="max-width:520px;">
   <h2>Probar envío de correo</h2>
   <p style="color:var(--muted); font-size:13px;">

@@ -32,7 +32,20 @@
       <tr class="{{ 'atrasada' if s.atrasado else '' }}">
         <td>{{ s.nombre }}</td>
         <td>{{ s.cedula }}</td>
-        <td>{{ s.telefono }}<br><span style="color:var(--muted)">{{ s.correo or 'sin correo' }}</span></td>
+        <td>
+          {{ s.telefono }}<br>
+          <span style="color:var(--muted)">{{ s.correo or 'sin correo' }}</span>
+          {% if s.telefono_alterno %}
+          <br><span style="font-size:11px; color:var(--muted)">Alt: {{ s.telefono_alterno }}
+          {% if s.nombre_alterno %} — {{ s.nombre_alterno }}{% endif %}
+          {% if s.parentesco_alterno %} ({{ s.parentesco_alterno }}){% endif %}
+          </span>
+          {% endif %}
+          {% if whatsapp_numero %}
+          <br><a href="https://wa.me/{{ whatsapp_numero }}?text={{ ('Hola ' + s.nombre + ', te contactamos de Créditos Crecer sobre tu solicitud.') | urlencode }}"
+                 target="_blank" style="font-size:11px; color:#25D366;">💬 WhatsApp</a>
+          {% endif %}
+        </td>
         <td>{{ s.direccion }}</td>
         <td>{{ s.ingreso_mensual | money }}</td>
         <td>
@@ -80,23 +93,13 @@
             </select>
           </form>
           {% if s.estado != 'Aprobado' %}
-          <form class="inline row" method="POST" action="{{ url_for('admin_aprobar', sid=s.id) }}" style="margin-top:6px;" title="Aprueba con un monto y N° de cuotas distintos al solicitado si es necesario">
+          <form class="inline row" method="POST" action="{{ url_for('admin_aprobar', sid=s.id) }}" style="margin-top:6px;" title="El día de cobro se asigna automáticamente según el día de hoy">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="number" name="monto_aprobado" placeholder="Monto" min="0" step="1000" value="{{ s.monto_solicitado | int }}" style="width:100px">
             <input type="number" name="num_cuotas_aprobadas" placeholder="Cuotas" min="1" max="52" value="{{ s.num_cuotas }}" style="width:55px">
-            <select name="dias_cobro" style="width:145px" title="Días de cobro">
-              <option value="Lunes">Lunes</option>
-              <option value="Martes">Martes</option>
-              <option value="Miércoles">Miércoles</option>
-              <option value="Jueves">Jueves</option>
-              <option value="Viernes">Viernes</option>
-              <option value="Sábado">Sábado</option>
-              <option value="Domingo">Domingo</option>
-              <option value="Lunes,Jueves">Lunes y Jueves</option>
-              <option value="Lunes,Viernes">Lunes y Viernes</option>
-              <option value="Martes,Viernes">Martes y Viernes</option>
-              <option value="Martes,Sábado">Martes y Sábado</option>
-              <option value="Miércoles,Sábado">Miércoles y Sábado</option>
+            <select name="corrimiento_dias" style="width:110px" title="Correr el día de cobro máximo 1 día">
+              <option value="0">Hoy (día entrega)</option>
+              <option value="1">+1 día</option>
             </select>
             <button type="submit" class="secondary">Aprobar</button>
           </form>
@@ -106,10 +109,21 @@
             Cobro: <strong>{{ s.dias_cobro or 'Lunes' }}</strong>
           </div>
           {% if not s.bloqueado %}
-          <form method="POST" action="{{ url_for('admin_simular_mora', sid=s.id) }}" style="margin-top:6px;" title="[Prueba] Marca este crédito como vencido sin pagar para probar el bloqueo">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="secondary" style="font-size:11px; padding:4px 8px;">[Prueba] Simular mora</button>
-          </form>
+          <details style="margin-top:6px;">
+            <summary style="font-size:12px; color:var(--accent); cursor:pointer;">Refinanciar crédito</summary>
+            <form method="POST" action="{{ url_for('admin_refinanciar', sid=s.id) }}" style="margin-top:6px;" class="inline row">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="number" name="nuevas_cuotas" placeholder="Cuotas" min="1" max="52" value="{{ s.num_cuotas }}" style="width:70px" title="Número de nuevas cuotas">
+              <select name="corrimiento_dias" style="width:110px">
+                <option value="0">Hoy</option>
+                <option value="1">+1 día</option>
+              </select>
+              <button type="submit" class="secondary" onclick="return confirm('¿Refinanciar este crédito? Se borrará el historial de pagos y se creará un nuevo plan.')">Refinanciar</button>
+            </form>
+            <p style="font-size:11px; color:var(--muted); margin-top:4px;">
+              Saldo actual: <strong>{{ s.saldo | money }}</strong> → nuevo total con interés: <strong>${{ "{:,.0f}".format(s.saldo * 1.2) }}</strong>
+            </p>
+          </details>
           {% endif %}
           {% endif %}
         </td>

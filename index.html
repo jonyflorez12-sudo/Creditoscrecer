@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuentas por Cobrar</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273549; --accent:#38bdf8;
+    --green:#22c55e; --red:#ef4444; --yellow:#facc15; --text:#e2e8f0; --muted:#94a3b8;
+  }
+  *{box-sizing:border-box; font-family:'Segoe UI',Arial,sans-serif;}
+  body{margin:0; background:var(--bg); color:var(--text);}
+  header{padding:24px 32px; background:linear-gradient(135deg,#1e293b,#0f172a); border-bottom:1px solid #334155;}
+  header h1{margin:0; font-size:28px;}
+  header p{margin:4px 0 0; color:var(--muted);}
+  .container{padding:24px 32px;}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px;}
+  .card{background:var(--card); border-radius:12px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,.3);}
+  .card .label{color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.5px;}
+  .card .value{font-size:24px; font-weight:700; margin-top:6px;}
+  .value.green{color:var(--green);} .value.red{color:var(--red);} .value.accent{color:var(--accent);} .value.yellow{color:var(--yellow);}
+  .tabs{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .tab{background:var(--card2); border:none; color:var(--text); padding:10px 18px; border-radius:8px; cursor:pointer; font-size:14px;}
+  .tab.active{background:var(--accent); color:#0f172a; font-weight:700;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .controls{display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;}
+  input[type=text], select{background:var(--card2); border:1px solid #334155; color:var(--text); padding:8px 12px; border-radius:8px; font-size:14px;}
+  table{width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden;}
+  th, td{padding:10px 12px; text-align:left; font-size:13px; border-bottom:1px solid #334155; white-space:nowrap;}
+  th{background:var(--card2); position:sticky; top:0; cursor:pointer;}
+  tbody tr:hover{background:#27374a;}
+  .badge{padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600;}
+  .badge.pagado{background:rgba(34,197,94,.15); color:var(--green);}
+  .badge.novencido{background:rgba(56,189,248,.15); color:var(--accent);}
+  .badge.vencido{background:rgba(239,68,68,.15); color:var(--red);}
+  .table-wrap{overflow-x:auto; border-radius:12px;}
+  .right{text-align:right;}
+  footer{padding:16px 32px; color:var(--muted); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Cuentas por Cobrar</h1>
+  <p>Panel de control de documentos, clientes y abonos</p>
+</header>
+<div class="container">
+  <div class="cards" id="summaryCards"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="documentos">Documentos</button>
+    <button class="tab" data-tab="clientes">Clientes</button>
+    <button class="tab" data-tab="abonos">Abonos</button>
+  </div>
+
+  <div class="panel active" id="panel-documentos">
+    <div class="controls">
+      <input type="text" id="docSearch" placeholder="Buscar cliente o ubicación...">
+      <select id="docEstado">
+        <option value="">Todos los estados</option>
+        <option value="Pagado">Pagado</option>
+        <option value="No vencido">No vencido</option>
+        <option value="Vencido">Vencido</option>
+      </select>
+    </div>
+    <div class="table-wrap"><table id="docTable">
+      <thead><tr>
+        <th>Nro Doc</th><th>Fecha Emisión</th><th>Cliente</th><th class="right">Valor</th>
+        <th>Vencimiento</th><th class="right">Días por Vencer</th><th>Estado</th>
+        <th class="right">Abonado</th><th class="right">Saldo</th><th>Último Abono</th><th class="right">Ganancia</th><th>Día Cobro</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="panel" id="panel-clientes">
+    <div class="controls">
+      <input type="text" id="cliSearch" placeholder="Buscar cliente...">
+    </div>
+    <div class="table-wrap"><table id="cliTable">
+      <thead><tr><th>Cód Cliente</th><th>Cliente</th><th>Dirección</th><th>Celular</th><th>Correo</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="panel" id="panel-abonos">
+    <div class="controls">
+      <input type="text" id="aboSearch" placeholder="Buscar cliente...">
+    </div>
+    <div class="table-wrap"><table id="aboTable">
+      <thead><tr><th>Nro Doc</th><th>Cliente</th><th class="right">Importe Doc.</th><th class="right">Valor Abonado</th><th>Fecha Abono</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+<footer>Generado a partir de cuentas-por-cobrar-reparado.xlsx</footer>
+
+<script>
+const DATA = {"documentos": [{"nro": 1029281642, "fecha_emision": "2026-05-03", "cod_cliente": 20260001.0, "cliente": "Lina Sofia Ospina Piragauta", "valor": 1200000.0, "ubicacion": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-06-14", "dias_por_vencer": 4.0, "estado": "No vencido", "abonado": 780000.0, "saldo": 420000.0, "ultimo_abono": "2026-06-08 00:00:00", "prestado": 0.0, "ganancia": 200000.0, "dia_cobro": "Lunes"}, {"nro": 1033680536, "fecha_emision": "2027-06-07", "cod_cliente": 20260002.0, "cliente": "Walter Orlando Ospina Ortiz", "valor": 600000.0, "ubicacion": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2027-07-19", "dias_por_vencer": 0.0, "estado": "Pagado", "abonado": 600000.0, "saldo": 0.0, "ultimo_abono": "2026-06-06 00:00:00", "prestado": 500000.0, "ganancia": 100000.0, "dia_cobro": "lunes"}, {"nro": 52370498, "fecha_emision": "2026-05-07", "cod_cliente": 20260003.0, "cliente": "Rosa Helena Calderon", "valor": 634000.0, "ubicacion": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "dias_credito": 56.0, "condicion": "Crédito", "vencimiento": "2026-07-02", "dias_por_vencer": 22.0, "estado": "No vencido", "abonado": 320000.0, "saldo": 314000.0, "ultimo_abono": "2026-06-04 00:00:00", "prestado": 500000.0, "ganancia": 134000.0, "dia_cobro": "jueves"}, {"nro": 52132247, "fecha_emision": "2026-05-10", "cod_cliente": 20260004.0, "cliente": "Maritza Riascos Riascos ", "valor": 1200000.0, "ubicacion": "Carrera 19 calle 60 B sur", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-06-21", "dias_por_vencer": 11.0, "estado": "No vencido", "abonado": 600000.0, "saldo": 600000.0, "ultimo_abono": "2026-06-01 00:00:00", "prestado": 1000000.0, "ganancia": 200000.0, "dia_cobro": "Lunes"}, {"nro": 1141316663, "fecha_emision": "2026-05-10", "cod_cliente": 20260005.0, "cliente": "Karol Sofia Castro Galan", "valor": 600000.0, "ubicacion": "Carrera 78 F #58-60", "dias_credito": 35.0, "condicion": "Crédito", "vencimiento": "2026-06-14", "dias_por_vencer": 4.0, "estado": "No vencido", "abonado": 120000.0, "saldo": 480000.0, "ultimo_abono": "2026-05-21 00:00:00", "prestado": 500000.0, "ganancia": 200000.0, "dia_cobro": "Domingos"}, {"nro": 11318393, "fecha_emision": "2026-05-28", "cod_cliente": 20260006.0, "cliente": "Tovias Garzon Villabon", "valor": 2400000.0, "ubicacion": "Guaduas ", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-09", "dias_por_vencer": 29.0, "estado": "No vencido", "abonado": 400000.0, "saldo": 2000000.0, "ultimo_abono": "2026-06-03 00:00:00", "prestado": 2000000.0, "ganancia": 400000.0, "dia_cobro": "miercoles "}, {"nro": 51971250, "fecha_emision": "2026-05-28", "cod_cliente": 20260007.0, "cliente": "Martha Ines Pulido Burgos ", "valor": 2400000.0, "ubicacion": "Guaduas ", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-09", "dias_por_vencer": 29.0, "estado": "No vencido", "abonado": 0.0, "saldo": 2400000.0, "ultimo_abono": "00:00:00", "prestado": 2000000.0, "ganancia": 400000.0, "dia_cobro": "Domingos"}, {"nro": 52660638, "fecha_emision": "2026-05-30", "cod_cliente": 20260008.0, "cliente": "Diva Luz Garcia ", "valor": 600000.0, "ubicacion": "Guaduas el rincon de Alleida", "dias_credito": 35.0, "condicion": "Crédito", "vencimiento": "2026-07-04", "dias_por_vencer": 24.0, "estado": "No vencido", "abonado": 120000.0, "saldo": 480000.0, "ultimo_abono": "2026-06-08 00:00:00", "prestado": 500000.0, "ganancia": 100000.0, "dia_cobro": "Domingos"}, {"nro": 1007568636, "fecha_emision": "2026-06-01", "cod_cliente": 20260009.0, "cliente": "Claudia Patricia tovar calle", "valor": 1200000.0, "ubicacion": "Onda ", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-13", "dias_por_vencer": 33.0, "estado": "No vencido", "abonado": 0.0, "saldo": 1200000.0, "ultimo_abono": "00:00:00", "prestado": 1000000.0, "ganancia": 200000.0, "dia_cobro": "miercoles "}, {"nro": 8660095, "fecha_emision": "2026-06-04", "cod_cliente": 20260010.0, "cliente": "Pablo Alvarez Lombana ", "valor": 1200000.0, "ubicacion": "Calle 19 18-07 b los vilrreyes -Guaduas", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-16", "dias_por_vencer": 36.0, "estado": "No vencido", "abonado": 0.0, "saldo": 1200000.0, "ultimo_abono": "00:00:00", "prestado": 1000000.0, "ganancia": 200000.0, "dia_cobro": "Martes"}, {"nro": 1025783383, "fecha_emision": "2026-06-06", "cod_cliente": 20260011.0, "cliente": "Ingrit Estefanny Garzon Pulido ", "valor": 2400000.0, "ubicacion": "Guaduas ", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-18", "dias_por_vencer": 38.0, "estado": "No vencido", "abonado": 0.0, "saldo": 2400000.0, "ultimo_abono": "00:00:00", "prestado": 2000000.0, "ganancia": 400000.0, "dia_cobro": "Sabado"}, {"nro": 6393538, "fecha_emision": "2026-06-06", "cod_cliente": 20260012.0, "cliente": "Diego Alexander Giraldo Garcia ", "valor": 2400000.0, "ubicacion": "Guaduas ", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2026-07-18", "dias_por_vencer": 38.0, "estado": "No vencido", "abonado": 0.0, "saldo": 2400000.0, "ultimo_abono": "00:00:00", "prestado": 2000000.0, "ganancia": 400000.0, "dia_cobro": "Martes"}, {"nro": "1033680536-01", "fecha_emision": "2027-06-07", "cod_cliente": 20260013.0, "cliente": "Walter Orlando Ospina Ortiz", "valor": 1800000.0, "ubicacion": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "dias_credito": 42.0, "condicion": "Crédito", "vencimiento": "2027-07-19", "dias_por_vencer": 404.0, "estado": "No vencido", "abonado": 0.0, "saldo": 1800000.0, "ultimo_abono": "00:00:00", "prestado": 1500000.0, "ganancia": 300000.0, "dia_cobro": "Domingos"}], "clientes": [{"cod_cliente": 20260001.0, "cliente": "Lina Sofia Ospina Piragauta", "direccion": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "celular": 3123158885.0, "correo": "No refiere ", "inicial": "L"}, {"cod_cliente": 20260002.0, "cliente": "Walter Orlando Ospina Ortiz", "direccion": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "celular": 3177596718.0, "correo": "No refiere ", "inicial": "R"}, {"cod_cliente": 20260003.0, "cliente": "Rosa Helena Calderon", "direccion": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "celular": 3108227146.0, "correo": "No refiere ", "inicial": "M"}, {"cod_cliente": 20260004.0, "cliente": "Maritza Riascos Riascos ", "direccion": "Carrera 19 calle 60 B sur", "celular": 3209036327.0, "correo": "No refiere ", "inicial": "K"}, {"cod_cliente": 20260005.0, "cliente": "Karol Sofia Castro Galan", "direccion": "Carrera 78 F #58-60", "celular": 3002551268.0, "correo": "No refiere ", "inicial": "T"}, {"cod_cliente": 20260006.0, "cliente": "Tovias Garzon Villabon", "direccion": "Guaduas ", "celular": 3125490430.0, "correo": "No refiere ", "inicial": "M"}, {"cod_cliente": 20260007.0, "cliente": "Martha Ines Pulido Burgos ", "direccion": "Guaduas ", "celular": 3203925240.0, "correo": "No refiere ", "inicial": "D"}, {"cod_cliente": 20260008.0, "cliente": "Diva Luz Garcia ", "direccion": "Guaduas el rincon de Alleida", "celular": 3114584908.0, "correo": "No refiere ", "inicial": "C"}, {"cod_cliente": 20260009.0, "cliente": "Claudia Patricia tovar calle", "direccion": "Onda ", "celular": 3202762774.0, "correo": "No refiere ", "inicial": "P"}, {"cod_cliente": 20260010.0, "cliente": "Pablo Alvarez Lombana ", "direccion": "Calle 19 18-07 b los vilrreyes -Guaduas", "celular": 3142706115.0, "correo": "No refiere ", "inicial": "I"}, {"cod_cliente": 20260011.0, "cliente": "Ingrit Estefanny Garzon Pulido ", "direccion": "Guaduas ", "celular": 3223765098.0, "correo": "No refiere ", "inicial": "D"}, {"cod_cliente": 20260012.0, "cliente": "Diego Alexander Giraldo Garcia ", "direccion": "Guaduas ", "celular": 3227209169.0, "correo": "No refiere ", "inicial": "W"}, {"cod_cliente": 20260013.0, "cliente": "Walter Orlando Ospina Ortiz", "direccion": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "celular": 3177596718.0, "correo": "No refiere ", "inicial": null}], "abonos": [{"nro": 1029281642, "fecha_emision": "2026-05-03", "cod_cliente": 20260001, "cliente": "Lina Sofia Ospina Piragauta", "importe": 1200000, "glosa": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "valor_abonado": 200000, "fecha_abono": "2026-05-11"}, {"nro": 1029281642, "fecha_emision": "2026-05-03", "cod_cliente": 20260001, "cliente": "Lina Sofia Ospina Piragauta", "importe": 1200000, "glosa": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "valor_abonado": 200000, "fecha_abono": "2026-05-21"}, {"nro": 52370498, "fecha_emision": "2026-05-07", "cod_cliente": 20260003, "cliente": "Rosa Helena Calderon", "importe": 634000, "glosa": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "valor_abonado": 80000, "fecha_abono": "2026-05-14"}, {"nro": 52370498, "fecha_emision": "2026-05-07", "cod_cliente": 20260003, "cliente": "Rosa Helena Calderon", "importe": 634000, "glosa": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "valor_abonado": 80000, "fecha_abono": "2026-05-21"}, {"nro": 52132247, "fecha_emision": "2026-05-10", "cod_cliente": 20260004, "cliente": "Maritza Riascos Riascos ", "importe": 1200000, "glosa": "Carrera 19 calle 60 B sur", "valor_abonado": 200000, "fecha_abono": "2026-05-19"}, {"nro": 1141316663, "fecha_emision": "2026-05-10", "cod_cliente": 20260005, "cliente": "Karol Sofia Castro Galan", "importe": 600000, "glosa": "Carrera 78 F #58-60", "valor_abonado": 120000, "fecha_abono": "2026-05-21"}, {"nro": 1029281642, "fecha_emision": "2026-05-03", "cod_cliente": 20260001, "cliente": "Lina Sofia Ospina Piragauta", "importe": 1200000, "glosa": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "valor_abonado": 200000, "fecha_abono": "2026-05-25"}, {"nro": 52370498, "fecha_emision": "2026-05-07", "cod_cliente": 20260003, "cliente": "Rosa Helena Calderon", "importe": 634000, "glosa": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "valor_abonado": 80000, "fecha_abono": "2026-05-28"}, {"nro": 52132247, "fecha_emision": "2026-05-10", "cod_cliente": 20260004, "cliente": "Maritza Riascos Riascos ", "importe": 1200000, "glosa": "Carrera 19 calle 60 B sur", "valor_abonado": 200000, "fecha_abono": "2026-05-25"}, {"nro": 52132247, "fecha_emision": "2026-05-10", "cod_cliente": 20260004, "cliente": "Maritza Riascos Riascos ", "importe": 1200000, "glosa": "Carrera 19 calle 60 B sur", "valor_abonado": 200000, "fecha_abono": "2026-06-01"}, {"nro": 52370498, "fecha_emision": "2026-05-07", "cod_cliente": 20260003, "cliente": "Rosa Helena Calderon", "importe": 634000, "glosa": "Carrera 18 M # 67 C14 (Colegio Conviventia)", "valor_abonado": 80000, "fecha_abono": "2026-06-04"}, {"nro": 1029281642, "fecha_emision": "2026-05-03", "cod_cliente": 20260001, "cliente": "Lina Sofia Ospina Piragauta", "importe": 1200000, "glosa": "Carrera 18k #45c 16 sur (Barrio Juan pablo cerca al salon comunal)", "valor_abonado": 180000, "fecha_abono": "2026-06-08"}, {"nro": 11318393, "fecha_emision": "2026-05-28", "cod_cliente": 20260006, "cliente": "Tovias Garzon Villabon", "importe": 2400000, "glosa": "Guaduas ", "valor_abonado": 400000, "fecha_abono": "2026-06-03"}, {"nro": 1033680536, "fecha_emision": "2027-06-07", "cod_cliente": 20260002, "cliente": "Walter Orlando Ospina Ortiz", "importe": 600000, "glosa": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "valor_abonado": 100000, "fecha_abono": "2026-05-19"}, {"nro": 1033680536, "fecha_emision": "2027-06-07", "cod_cliente": 20260002, "cliente": "Walter Orlando Ospina Ortiz", "importe": 600000, "glosa": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "valor_abonado": 200000, "fecha_abono": "2026-05-22"}, {"nro": 1033680536, "fecha_emision": "2027-06-07", "cod_cliente": 20260002, "cliente": "Walter Orlando Ospina Ortiz", "importe": 600000, "glosa": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "valor_abonado": 100000, "fecha_abono": "2026-06-01"}, {"nro": 1033680536, "fecha_emision": "2027-06-07", "cod_cliente": 20260002, "cliente": "Walter Orlando Ospina Ortiz", "importe": 600000, "glosa": "Carrera 19-L # 65 d16 (Barrio Juan Pablo)", "valor_abonado": 200000, "fecha_abono": "2026-06-06"}, {"nro": 52660638, "fecha_emision": "2026-05-30", "cod_cliente": 20260008, "cliente": "Diva Luz Garcia ", "importe": 600000, "glosa": "Guaduas el rincon de Alleida", "valor_abonado": 120000, "fecha_abono": "2026-06-08"}]};
+
+const fmt = n => '$' + Math.round(n).toLocaleString('es-CO');
+
+function estadoBadge(estado){
+  const cls = estado==='Pagado'?'pagado':(estado==='Vencido'?'vencido':'novencido');
+  return `<span class="badge ${cls}">${estado}</span>`;
+}
+
+function renderSummary(){
+  const docs = DATA.documentos;
+  const totalPrestado = docs.reduce((a,d)=>a+(d.prestado||0),0);
+  const totalPorCobrar = docs.reduce((a,d)=>a+(d.saldo||0),0);
+  const totalGanancia = docs.reduce((a,d)=>a+(d.ganancia||0),0);
+  const vencidos = docs.filter(d=>d.estado==='Vencido').length;
+  const pagados = docs.filter(d=>d.estado==='Pagado').length;
+
+  const cards = [
+    {label:'Total Documentos', value:docs.length, cls:'accent'},
+    {label:'Total Prestado', value:fmt(totalPrestado), cls:''},
+    {label:'Total por Cobrar', value:fmt(totalPorCobrar), cls:'yellow'},
+    {label:'Ganancia Estimada', value:fmt(totalGanancia), cls:'green'},
+    {label:'Documentos Pagados', value:pagados, cls:'green'},
+    {label:'Documentos Vencidos', value:vencidos, cls:'red'},
+  ];
+  document.getElementById('summaryCards').innerHTML = cards.map(c=>
+    `<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`
+  ).join('');
+}
+
+function renderDocs(){
+  const search = document.getElementById('docSearch').value.toLowerCase();
+  const estado = document.getElementById('docEstado').value;
+  const rows = DATA.documentos.filter(d=>{
+    if(estado && d.estado!==estado) return false;
+    if(search && !((d.cliente||'').toLowerCase().includes(search) || (d.ubicacion||'').toLowerCase().includes(search))) return false;
+    return true;
+  });
+  document.querySelector('#docTable tbody').innerHTML = rows.map(d=>`
+    <tr>
+      <td>${d.nro}</td>
+      <td>${d.fecha_emision||''}</td>
+      <td>${d.cliente}</td>
+      <td class="right">${fmt(d.valor)}</td>
+      <td>${d.vencimiento||''}</td>
+      <td class="right">${Math.round(d.dias_por_vencer)}</td>
+      <td>${estadoBadge(d.estado)}</td>
+      <td class="right">${fmt(d.abonado)}</td>
+      <td class="right">${fmt(d.saldo)}</td>
+      <td>${(d.ultimo_abono||'').split(' ')[0]}</td>
+      <td class="right">${fmt(d.ganancia)}</td>
+      <td>${(d.dia_cobro||'').trim()}</td>
+    </tr>`).join('');
+}
+
+function renderClientes(){
+  const search = document.getElementById('cliSearch').value.toLowerCase();
+  const rows = DATA.clientes.filter(c=> !search || (c.cliente||'').toLowerCase().includes(search));
+  document.querySelector('#cliTable tbody').innerHTML = rows.map(c=>`
+    <tr>
+      <td>${Math.round(c.cod_cliente)}</td>
+      <td>${(c.cliente||'').trim()}</td>
+      <td>${c.direccion||''}</td>
+      <td>${c.celular?Math.round(c.celular):''}</td>
+      <td>${(c.correo||'').trim()}</td>
+    </tr>`).join('');
+}
+
+function renderAbonos(){
+  const search = document.getElementById('aboSearch').value.toLowerCase();
+  const rows = DATA.abonos.filter(a=> !search || (a.cliente||'').toLowerCase().includes(search))
+    .sort((a,b)=> (a.fecha_abono < b.fecha_abono ? 1 : -1));
+  document.querySelector('#aboTable tbody').innerHTML = rows.map(a=>`
+    <tr>
+      <td>${a.nro}</td>
+      <td>${(a.cliente||'').trim()}</td>
+      <td class="right">${fmt(a.importe)}</td>
+      <td class="right">${fmt(a.valor_abonado)}</td>
+      <td>${a.fecha_abono||''}</td>
+    </tr>`).join('');
+}
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('docSearch').addEventListener('input', renderDocs);
+document.getElementById('docEstado').addEventListener('change', renderDocs);
+document.getElementById('cliSearch').addEventListener('input', renderClientes);
+document.getElementById('aboSearch').addEventListener('input', renderAbonos);
+
+renderSummary();
+renderDocs();
+renderClientes();
+renderAbonos();
+</script>
+</body>
+</html>

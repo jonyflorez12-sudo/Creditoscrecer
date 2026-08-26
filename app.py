@@ -97,6 +97,12 @@ def init_db():
         conn.execute("ALTER TABLE solicitudes ADD COLUMN mora_revisada INTEGER NOT NULL DEFAULT 0")
     if "dias_cobro" not in cols:
         conn.execute("ALTER TABLE solicitudes ADD COLUMN dias_cobro TEXT NOT NULL DEFAULT 'Lunes'")
+    if "telefono_alterno" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN telefono_alterno TEXT")
+    if "nombre_alterno" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN nombre_alterno TEXT")
+    if "parentesco_alterno" not in cols:
+        conn.execute("ALTER TABLE solicitudes ADD COLUMN parentesco_alterno TEXT")
 
     # genera clave de acceso (cédula) para clientes que ya existían sin clave_hash
     sin_clave = conn.execute("SELECT id, cedula FROM solicitudes WHERE clave_hash IS NULL").fetchall()
@@ -105,10 +111,15 @@ def init_db():
                       (generate_password_hash(row["cedula"]), row["id"]))
 
     for clave in ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
-                  "brevo_api_key", "recordatorio_token"):
+                  "brevo_api_key", "recordatorio_token", "whatsapp_numero", "tasa_mora_diaria"):
         row = conn.execute("SELECT valor FROM settings WHERE clave=?", (clave,)).fetchone()
         if not row:
-            valor = secrets.token_urlsafe(32) if clave == "recordatorio_token" else ""
+            if clave == "recordatorio_token":
+                valor = secrets.token_urlsafe(32)
+            elif clave == "tasa_mora_diaria":
+                valor = "0.02"   # 2% diario por defecto
+            else:
+                valor = ""
             conn.execute("INSERT INTO settings (clave, valor) VALUES (?, ?)", (clave, valor))
     conn.commit()
     conn.close()
@@ -174,14 +185,15 @@ def _parsear_dias(dias_cobro_str):
 
 
 def _fecha_pago(fecha_base, semana, dia_semana_num):
-    """Calcula la fecha real de pago: primer día 'dia_semana_num' a partir
-    de (fecha_base + (semana-1) semanas). Si la fecha base ya es ese día
-    de la semana, lo toma a partir de la semana siguiente."""
-    inicio_semana = fecha_base + timedelta(weeks=semana - 1)
-    delta = (dia_semana_num - inicio_semana.weekday()) % 7
-    if delta == 0 and semana == 1:
-        delta = 7  # el primer pago es la semana que viene, no el mismo día
-    return inicio_semana + timedelta(days=delta)
+    """Calcula la fecha real de pago.
+    La primera cuota vence exactamente 7 días después de la aprobación
+    (o el siguiente 'dia_semana_num' contando desde la aprobación,
+    mínimo 1 día adelante para respetar el mismo día de la semana)."""
+    inicio = fecha_base + timedelta(weeks=semana - 1)
+    delta = (dia_semana_num - inicio.weekday()) % 7
+    if delta == 0:
+        delta = 7   # mismo día de semana → siguiente ocurrencia (7 días)
+    return inicio + timedelta(days=delta)
 
 
 def estado_cuenta(solicitud, pagos):
@@ -196,6 +208,10 @@ def estado_cuenta(solicitud, pagos):
     dias = _parsear_dias(solicitud["dias_cobro"] if "dias_cobro" in solicitud.keys() else "Lunes")
     n_dias = len(dias)
     monto_sub = round(solicitud["cuota_estimada"] / n_dias, 2)
+    try:
+        tasa_mora = float(get_setting("tasa_mora_diaria", "0.02"))
+    except Exception:
+        tasa_mora = 0.02
 
     acumulado_esperado = 0
     numero = 0
@@ -211,16 +227,22 @@ def estado_cuenta(solicitud, pagos):
             )
             if abonado_total >= acumulado_esperado - 0.01:
                 estado = "Pagada"
-            elif hoy > vencimiento + timedelta(days=7):
+                mora = 0
+            elif hoy > vencimiento + timedelta(days=1):
+                # Atrasada si lleva más de 1 día de retraso (punto 6)
+                dias_atraso = (hoy - vencimiento).days
                 estado = "Atrasada"
+                mora = round(dias_atraso * tasa_mora * monto_sub, 0)
             else:
                 estado = "Pendiente"
+                mora = 0
             cuotas.append({
                 "numero": numero,
                 "semana": semana,
                 "dia_nombre": _DIAS_NOMBRE[dia_num],
                 "vencimiento": vencimiento.strftime("%Y-%m-%d"),
                 "monto": monto_sub,
+                "mora": mora,
                 "estado": estado,
                 "atrasada": estado == "Atrasada",
             })
@@ -467,6 +489,9 @@ def registro_post():
     ingreso_mensual = float(request.form["ingreso_mensual"])
     monto_solicitado = float(request.form["monto_solicitado"])
     num_cuotas = int(request.form["num_cuotas"])
+    telefono_alterno = request.form.get("telefono_alterno", "").strip()
+    nombre_alterno = request.form.get("nombre_alterno", "").strip()
+    parentesco_alterno = request.form.get("parentesco_alterno", "").strip()
 
     viable, cuota, total_a_pagar = evaluar_viabilidad(ingreso_mensual, monto_solicitado, num_cuotas)
 
@@ -482,11 +507,14 @@ def registro_post():
     conn.execute(
         """INSERT INTO solicitudes
            (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
-            num_cuotas, estado, viable, cuota_estimada, total_a_pagar, puntaje, clave_hash, creado_en)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            num_cuotas, estado, viable, cuota_estimada, total_a_pagar, puntaje, clave_hash,
+            telefono_alterno, nombre_alterno, parentesco_alterno, creado_en)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nombre, cedula, telefono, correo, direccion, ingreso_mensual, monto_solicitado,
          num_cuotas, estado_inicial, viable_final, cuota, total_a_pagar, PUNTAJE_INICIAL,
-         generate_password_hash(cedula), datetime.now().strftime("%Y-%m-%d %H:%M")),
+         generate_password_hash(cedula),
+         telefono_alterno or None, nombre_alterno or None, parentesco_alterno or None,
+         datetime.now().strftime("%Y-%m-%d %H:%M")),
     )
     conn.commit()
     conn.close()
@@ -498,7 +526,9 @@ def registro_post():
         return render_template("gracias.html", nombre=nombre, credito_activo=True)
 
     return render_template("gracias.html", nombre=nombre, viable=viable, cuota=cuota,
-                            total_a_pagar=total_a_pagar, num_cuotas=num_cuotas)
+                            total_a_pagar=total_a_pagar, num_cuotas=num_cuotas,
+                            whatsapp_numero=get_setting("whatsapp_numero"),
+                            cedula=cedula, telefono=telefono, direccion=direccion)
 
 
 # --------------------------------------------------------------------------- Login / sesión admin
@@ -560,6 +590,7 @@ def admin_dashboard():
         total=total, viables=viables, aprobados=aprobados, pendientes=pendientes,
         total_prestado=total_prestado, total_por_cobrar=total_por_cobrar,
         total_abonado=total_abonado, total_gastos=total_gastos,
+        whatsapp_numero=get_setting("whatsapp_numero"),
     )
 
 
@@ -589,11 +620,15 @@ def admin_aprobar(sid):
 
     monto_aprobado = float(request.form.get("monto_aprobado") or s["monto_solicitado"])
     num_cuotas = int(request.form.get("num_cuotas_aprobadas") or s["num_cuotas"])
-    dias_cobro = request.form.get("dias_cobro", "Lunes").strip() or "Lunes"
     if monto_aprobado <= 0:
         monto_aprobado = s["monto_solicitado"]
     if num_cuotas <= 0:
         num_cuotas = s["num_cuotas"]
+
+    # Día de cobro = mismo día de la semana en que se aprueba + corrimiento opcional (0 ó 1 día)
+    corrimiento = int(request.form.get("corrimiento_dias", 0))
+    hoy_aprobacion = datetime.now() + timedelta(days=corrimiento)
+    dias_cobro = _DIAS_NOMBRE[hoy_aprobacion.weekday()]
 
     total_a_pagar = round(monto_aprobado * (1 + TASA_INTERES), 2)
     cuota = round(total_a_pagar / num_cuotas, 2)
@@ -650,6 +685,53 @@ def admin_simular_mora(sid):
     conn.commit()
     conn.close()
     flash("Simulación aplicada: este crédito ahora aparece vencido sin pagar.")
+    return redirect(url_for("admin_dashboard"))
+
+
+# --------------------------------------------------------------------------- Refinanciación
+@app.route("/admin/solicitud/<int:sid>/refinanciar", methods=["POST"])
+def admin_refinanciar(sid):
+    """Refinancia un crédito activo: toma el saldo pendiente como nuevo capital
+    y aplica la tasa de interés normal sobre ese monto, extendiendo las cuotas."""
+    conn = get_db()
+    s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
+    if not s or s["estado"] != "Aprobado":
+        conn.close()
+        flash("Solo se pueden refinanciar créditos aprobados.")
+        return redirect(url_for("admin_dashboard"))
+
+    nuevas_cuotas = int(request.form.get("nuevas_cuotas") or 7)
+    if nuevas_cuotas < 1:
+        nuevas_cuotas = 7
+
+    saldo, abonado = saldo_pendiente(conn, s)
+    if saldo <= 0:
+        conn.close()
+        flash("Este crédito ya está saldado; no requiere refinanciación.")
+        return redirect(url_for("admin_dashboard"))
+
+    nuevo_total = round(saldo * (1 + TASA_INTERES), 2)
+    nueva_cuota = round(nuevo_total / nuevas_cuotas, 2)
+    corrimiento = int(request.form.get("corrimiento_dias", 0))
+    hoy_ref = datetime.now() + timedelta(days=corrimiento)
+    dias_cobro = _DIAS_NOMBRE[hoy_ref.weekday()]
+
+    # Borra los pagos anteriores para reiniciar el plan (los abonados quedan en la historia)
+    conn.execute(
+        """UPDATE solicitudes
+           SET total_a_pagar=?, num_cuotas=?, cuota_estimada=?,
+               monto_aprobado=?, fecha_aprobacion=?, dias_cobro=?, mora_revisada=0
+           WHERE id=?""",
+        (nuevo_total, nuevas_cuotas, nueva_cuota,
+         saldo, datetime.now().strftime("%Y-%m-%d"), dias_cobro, sid),
+    )
+    # Elimina pagos anteriores para que el plan empiece desde cero
+    conn.execute("DELETE FROM pagos WHERE solicitud_id=?", (sid,))
+    conn.commit()
+    recalcular_puntaje(conn, sid)
+    conn.close()
+    flash(f"Refinanciación aplicada: saldo ${saldo:,.0f} → nuevo total ${nuevo_total:,.0f} "
+          f"en {nuevas_cuotas} cuotas de ${nueva_cuota:,.0f}. Día de cobro: {dias_cobro}.")
     return redirect(url_for("admin_dashboard"))
 
 
@@ -928,7 +1010,11 @@ def admin_configuracion():
             set_setting("brevo_api_key", nueva_api_key)
         if request.form.get("smtp_from", "").strip():
             set_setting("smtp_from", request.form.get("smtp_from", "").strip())
-        flash("Configuración de correo guardada.")
+        if request.form.get("whatsapp_numero", "").strip():
+            set_setting("whatsapp_numero", request.form.get("whatsapp_numero", "").strip())
+        if request.form.get("tasa_mora_diaria", "").strip():
+            set_setting("tasa_mora_diaria", request.form.get("tasa_mora_diaria", "").strip())
+        flash("Configuración guardada.")
         return redirect(url_for("admin_configuracion"))
 
     config = {
@@ -938,6 +1024,8 @@ def admin_configuracion():
         "smtp_from": get_setting("smtp_from"),
         "smtp_password_set": bool(get_setting("smtp_password")),
         "brevo_api_key_set": bool(get_setting("brevo_api_key")),
+        "whatsapp_numero": get_setting("whatsapp_numero"),
+        "tasa_mora_diaria": get_setting("tasa_mora_diaria", "0.02"),
     }
     return render_template("configuracion.html", config=config)
 

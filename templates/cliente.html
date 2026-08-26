@@ -52,7 +52,7 @@
   </p>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>Semana</th><th>Día</th><th>Fecha</th><th>Valor</th><th>Estado</th></tr></thead>
+    <thead><tr><th>#</th><th>Semana</th><th>Día</th><th>Fecha</th><th>Valor</th><th>Mora</th><th>Estado</th></tr></thead>
     <tbody>
       {% for c in cuotas %}
       <tr class="{{ 'atrasada' if c.atrasada else '' }}">
@@ -61,6 +61,7 @@
         <td>{{ c.dia_nombre }}</td>
         <td>{{ c.vencimiento }}</td>
         <td>{{ c.monto | money }}</td>
+        <td>{% if c.mora %}<span style="color:var(--red)">+{{ c.mora | money }}</span>{% else %}—{% endif %}</td>
         <td><span class="badge {{ c.estado }}">{{ c.estado }}</span></td>
       </tr>
       {% endfor %}
