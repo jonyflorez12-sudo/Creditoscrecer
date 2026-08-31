@@ -33,26 +33,47 @@
     <input type="number" name="num_cuotas" min="1" max="52" value="7" required>
 
     <hr style="margin:20px 0; border-color:var(--surface2);">
-    <h3 style="margin-bottom:8px;">Contacto alternativo</h3>
+    <h3 style="margin-bottom:4px;">Contacto alternativo *</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
-      En caso de no encontrarte, ¿a quién podemos contactar? (opcional)
+      Puede ser una línea adicional tuya o la de un familiar. En caso de no encontrarte, les contactaremos a ellos.
     </p>
 
-    <label>Teléfono alterno</label>
-    <input type="text" name="telefono_alterno" placeholder="Ej: 3001234567">
+    <label>Teléfono alterno *</label>
+    <input type="text" name="telefono_alterno" placeholder="Ej: 3001234567" required>
 
-    <label>Nombre del contacto alterno</label>
-    <input type="text" name="nombre_alterno" placeholder="Nombre completo">
+    <label>Nombre del contacto alterno *</label>
+    <input type="text" name="nombre_alterno" placeholder="Nombre completo" required>
 
-    <label>Parentesco</label>
-    <input type="text" name="parentesco_alterno" placeholder="Ej: esposo/a, hijo/a, hermano/a">
+    <label>Parentesco *</label>
+    <input type="text" name="parentesco_alterno" placeholder="Ej: esposo/a, hijo/a, hermano/a, línea propia" required>
 
-    <p style="color:var(--muted); font-size:13px; margin-top:14px;">
-      Recuerda: por cada $1.000.000 prestado se pagan $1.200.000 en total
-      (interés del 20%), distribuidos en cuotas semanales iguales.
-    </p>
+    <p id="nota-cuotas" style="color:var(--muted); font-size:13px; margin-top:14px; padding:10px; background:var(--surface2); border-radius:6px;"></p>
 
     <button type="submit">Enviar solicitud</button>
   </form>
+
+<script>
+const montoCampo = document.querySelector('[name="monto_solicitado"]');
+const cuotasCampo = document.querySelector('[name="num_cuotas"]');
+const nota = document.getElementById('nota-cuotas');
+
+function actualizarCuotas() {
+  const monto = parseFloat(montoCampo.value) || 0;
+  let maxCuotas, sugerida;
+  if (monto <= 0) { nota.textContent = ''; return; }
+  if (monto <= 300000)       { maxCuotas = 3;  sugerida = 3; }
+  else if (monto <= 500000)  { maxCuotas = 5;  sugerida = 4; }
+  else if (monto <= 1000000) { maxCuotas = 7;  sugerida = 6; }
+  else if (monto <= 2000000) { maxCuotas = 10; sugerida = 8; }
+  else                        { maxCuotas = 16; sugerida = 12; }
+
+  cuotasCampo.max = maxCuotas;
+  if (parseInt(cuotasCampo.value) > maxCuotas) cuotasCampo.value = maxCuotas;
+  nota.textContent = `Para un monto de $${monto.toLocaleString('es-CO')}, el máximo de cuotas es ${maxCuotas} semanas. Sugerido: ${sugerida} cuotas.`;
+}
+
+montoCampo.addEventListener('input', actualizarCuotas);
+cuotasCampo.addEventListener('input', actualizarCuotas);
+</script>
 </div>
 {% endblock %}
