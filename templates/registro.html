@@ -61,11 +61,8 @@ function actualizarCuotas() {
   const monto = parseFloat(montoCampo.value) || 0;
   let maxCuotas, sugerida;
   if (monto <= 0) { nota.textContent = ''; return; }
-  if (monto <= 300000)       { maxCuotas = 3;  sugerida = 3; }
-  else if (monto <= 500000)  { maxCuotas = 5;  sugerida = 4; }
-  else if (monto <= 1000000) { maxCuotas = 7;  sugerida = 6; }
-  else if (monto <= 2000000) { maxCuotas = 10; sugerida = 8; }
-  else                        { maxCuotas = 16; sugerida = 12; }
+  if (monto <= 500000) { maxCuotas = 5; sugerida = 5; }
+  else                 { maxCuotas = 6; sugerida = 6; }
 
   cuotasCampo.max = maxCuotas;
   if (parseInt(cuotasCampo.value) > maxCuotas) cuotasCampo.value = maxCuotas;
