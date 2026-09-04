@@ -557,12 +557,17 @@ def admin_dashboard():
     conn = get_db()
     solicitudes = conn.execute("SELECT * FROM solicitudes ORDER BY creado_en DESC").fetchall()
 
-    detalle = []
+    activos = []
     total_prestado = total_por_cobrar = total_abonado = 0
     for s in solicitudes:
         if verificar_fin_credito(conn, s):
             s = conn.execute("SELECT * FROM solicitudes WHERE id=?", (s["id"],)).fetchone()
         saldo, abonado = saldo_pendiente(conn, s)
+
+        # Créditos completamente pagados van al historial, no al dashboard
+        if s["estado"] == "Aprobado" and saldo <= 0:
+            continue
+
         d = dict(s)
         d["saldo"] = saldo
         d["abonado"] = abonado
@@ -570,7 +575,7 @@ def admin_dashboard():
         d["cuotas"] = estado_cuenta(s, pagos_s)
         d["atrasado"] = any(c["atrasada"] for c in d["cuotas"])
         d["aumento"] = analisis_aumento(s)
-        detalle.append(d)
+        activos.append(d)
         if s["estado"] == "Aprobado":
             total_prestado += s["monto_aprobado"] if s["monto_aprobado"] is not None else s["monto_solicitado"]
             total_por_cobrar += saldo
@@ -579,18 +584,52 @@ def admin_dashboard():
     total_gastos = conn.execute("SELECT COALESCE(SUM(monto),0) AS s FROM gastos").fetchone()["s"]
     conn.close()
 
-    total = len(solicitudes)
-    viables = sum(1 for s in solicitudes if s["viable"])
-    aprobados = sum(1 for s in solicitudes if s["estado"] == "Aprobado")
-    pendientes = sum(1 for s in solicitudes if s["estado"] == "Pendiente")
+    total = len(activos)
+    viables = sum(1 for s in activos if s["viable"])
+    aprobados = sum(1 for s in activos if s["estado"] == "Aprobado")
+    pendientes = sum(1 for s in activos if s["estado"] == "Pendiente")
 
     return render_template(
         "admin.html",
-        solicitudes=detalle,
+        solicitudes=activos,
         total=total, viables=viables, aprobados=aprobados, pendientes=pendientes,
         total_prestado=total_prestado, total_por_cobrar=total_por_cobrar,
         total_abonado=total_abonado, total_gastos=total_gastos,
         whatsapp_numero=get_setting("whatsapp_numero"),
+    )
+
+
+# --------------------------------------------------------------------------- Historial de créditos pagados
+@app.route("/admin/historial")
+def admin_historial():
+    conn = get_db()
+    solicitudes = conn.execute(
+        "SELECT * FROM solicitudes WHERE estado='Aprobado' ORDER BY creado_en DESC"
+    ).fetchall()
+
+    historial = []
+    total_prestado = total_recaudado = total_ganancia = 0
+    for s in solicitudes:
+        saldo, abonado = saldo_pendiente(conn, s)
+        if saldo > 0:
+            continue   # todavía activo
+        monto = s["monto_aprobado"] if s["monto_aprobado"] is not None else s["monto_solicitado"]
+        ganancia = round(s["total_a_pagar"] - monto, 2)
+        d = dict(s)
+        d["abonado"] = abonado
+        d["ganancia"] = ganancia
+        historial.append(d)
+        total_prestado += monto
+        total_recaudado += abonado
+        total_ganancia += ganancia
+
+    conn.close()
+    return render_template(
+        "historial.html",
+        historial=historial,
+        total_prestado=total_prestado,
+        total_recaudado=total_recaudado,
+        total_ganancia=total_ganancia,
     )
 
 

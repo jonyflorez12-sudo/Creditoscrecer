@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Historial de créditos{% endblock %}
+{% block nav %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% set active = 'historial' %}
+
+<div class="cards">
+  <div class="card stat">
+    <div class="label">Créditos finalizados</div>
+    <div class="value accent">{{ historial | length }}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Total prestado</div>
+    <div class="value">{{ total_prestado | money }}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Total recaudado</div>
+    <div class="value green">{{ total_recaudado | money }}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Ganancias obtenidas</div>
+    <div class="value accent">{{ total_ganancia | money }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Créditos pagados — historial completo</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Estos créditos ya fueron cancelados en su totalidad. Si el cliente solicita un nuevo crédito, aparecerá en el panel principal.
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Cédula</th>
+        <th>Teléfono</th>
+        <th>Monto prestado</th>
+        <th>Total pagado</th>
+        <th>Ganancia</th>
+        <th>Cuotas</th>
+        <th>Día de cobro</th>
+        <th>Fecha aprobación</th>
+        <th>Puntaje</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in historial %}
+      <tr>
+        <td>{{ s.nombre }}</td>
+        <td>{{ s.cedula }}</td>
+        <td>{{ s.telefono }}</td>
+        <td>{{ (s.monto_aprobado or s.monto_solicitado) | money }}</td>
+        <td class="green">{{ s.abonado | money }}</td>
+        <td class="accent">{{ s.ganancia | money }}</td>
+        <td>{{ s.num_cuotas }}</td>
+        <td>{{ s.dias_cobro or 'Lunes' }}</td>
+        <td>{{ s.fecha_aprobacion or '—' }}</td>
+        <td>
+          <span class="{{ 'green' if s.puntaje >= 500 else ('yellow' if s.puntaje >= 400 else 'red') }}">
+            {{ s.puntaje }}
+          </span>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" style="text-align:center; color:var(--muted);">
+        Aún no hay créditos finalizados.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}
