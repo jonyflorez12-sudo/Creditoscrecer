@@ -1,4 +1,4 @@
-import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request, urllib.error
+import sqlite3, os, secrets, smtplib, socket, contextlib, json, urllib.request, urllib.error, time
 import pandas as pd
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
@@ -16,16 +16,137 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("RENDER") is not None,
 )
-DB = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "prestamos.db")
-TASA_INTERES = 0.20  # 20% sobre el monto. Ej: $1.000.000 -> $1.200.000 a pagar
+TASA_INTERES = 0.20
 DEFAULT_ADMIN_PASSWORD = "admin123"
 
+# --------------------------------------------------------------------------- DB (SQLite local / PostgreSQL en Render)
+_DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if _DATABASE_URL.startswith("postgres://"):
+    _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql://", 1)
+_IS_PG = bool(_DATABASE_URL)
+_DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "prestamos.db")
 
-# --------------------------------------------------------------------------- DB
+if _IS_PG:
+    import psycopg2, psycopg2.extras
+
+
+class _Row(dict):
+    """Fila de BD accesible por clave y por atributo (compatible con sqlite3.Row)."""
+    def __getattr__(self, k):
+        try: return self[k]
+        except KeyError: raise AttributeError(k)
+    def keys(self): return list(super().keys())
+
+
+def _pg_sql(sql):
+    """Adapta SQL de SQLite a PostgreSQL."""
+    sql = sql.replace("?", "%s")
+    sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    sql = sql.replace(" AUTOINCREMENT", "")
+    s = sql.strip().upper()
+    if s.startswith("INSERT") and "RETURNING" not in s:
+        sql = sql.rstrip().rstrip(";") + " RETURNING id"
+    if s.startswith("INSERT OR IGNORE "):
+        sql = sql.replace("INSERT OR IGNORE ", "INSERT ", 1)
+        sql = sql.rstrip().rstrip(";")
+        if "RETURNING" in sql.upper():
+            sql = sql[:sql.upper().rfind("RETURNING")].rstrip() + " ON CONFLICT DO NOTHING RETURNING id"
+        else:
+            sql += " ON CONFLICT DO NOTHING"
+    return sql
+
+
+class _Cursor:
+    def __init__(self, raw):
+        self._c = raw
+
+    def execute(self, sql, params=()):
+        if _IS_PG:
+            sql = _pg_sql(sql)
+        self._c.execute(sql, list(params) if params else [])
+        return self
+
+    def fetchone(self):
+        row = self._c.fetchone()
+        if row is None:
+            return None
+        return _Row(dict(row)) if _IS_PG else row
+
+    def fetchall(self):
+        rows = self._c.fetchall()
+        return [_Row(dict(r)) for r in rows] if _IS_PG else rows
+
+    @property
+    def lastrowid(self):
+        if _IS_PG:
+            row = self._c.fetchone()
+            return row["id"] if row else None
+        return self._c.lastrowid
+
+
+class _Conn:
+    def __init__(self):
+        if _IS_PG:
+            self._conn = psycopg2.connect(
+                _DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
+            )
+        else:
+            self._conn = sqlite3.connect(_DB_PATH)
+            self._conn.row_factory = sqlite3.Row
+
+    def execute(self, sql, params=()):
+        cur = self._conn.cursor()
+        return _Cursor(cur).execute(sql, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        try: self._conn.close()
+        except Exception: pass
+
+
 def get_db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _Conn()
+
+
+def _tabla_columnas(conn, tabla):
+    """Devuelve los nombres de columna de una tabla (compatible SQLite y PG)."""
+    if _IS_PG:
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name=%s",
+            (tabla,)
+        ).fetchall()
+        return [r["column_name"] for r in rows]
+    else:
+        rows = conn.execute(f"PRAGMA table_info({tabla})").fetchall()
+        return [r["name"] for r in rows]
+
+
+# --------------------------------------------------------------------------- Seguridad: rate-limit en login
+_login_intentos: dict = {}   # ip → [timestamp, ...]
+_LOGIN_MAX = 10               # máx intentos por ventana
+_LOGIN_VENTANA = 300          # segundos (5 min)
+
+
+def _login_bloqueado(ip: str) -> bool:
+    ahora = time.time()
+    intentos = [t for t in _login_intentos.get(ip, []) if ahora - t < _LOGIN_VENTANA]
+    _login_intentos[ip] = intentos
+    return len(intentos) >= _LOGIN_MAX
+
+
+def _login_registrar(ip: str):
+    _login_intentos.setdefault(ip, []).append(time.time())
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["Permissions-Policy"] = "geolocation=(), microphone=()"
+    return resp
 
 
 def init_db():
@@ -82,7 +203,7 @@ def init_db():
     if not row:
         conn.execute("INSERT INTO settings (clave, valor) VALUES (?, ?)",
                       ("admin_password_hash", generate_password_hash(DEFAULT_ADMIN_PASSWORD)))
-    cols = [c["name"] for c in conn.execute("PRAGMA table_info(solicitudes)").fetchall()]
+    cols = _tabla_columnas(conn, "solicitudes")
     if "monto_aprobado" not in cols:
         conn.execute("ALTER TABLE solicitudes ADD COLUMN monto_aprobado REAL")
     if "puntaje" not in cols:
@@ -534,13 +655,18 @@ def registro_post():
 # --------------------------------------------------------------------------- Login / sesión admin
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
     if request.method == "POST":
+        if _login_bloqueado(ip):
+            flash("Demasiados intentos fallidos. Espera 5 minutos e intenta de nuevo.")
+            return render_template("admin_login.html")
         password_hash = get_setting("admin_password_hash")
         if password_hash and check_password_hash(password_hash, request.form.get("password", "")):
             session.clear()
             session["admin"] = True
             session["csrf_token"] = secrets.token_hex(16)
             return redirect(url_for("admin_dashboard"))
+        _login_registrar(ip)
         flash("Contraseña incorrecta")
     return render_template("admin_login.html")
 
