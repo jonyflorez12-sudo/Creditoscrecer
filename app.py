@@ -1312,17 +1312,57 @@ def admin_importar():
         importados = omitidos = pagos_importados = 0
         nro_a_sid = {}  # NRO DOC → solicitud_id
 
+        # Normalización de días de cobro (incluyendo todos los casos del Excel)
+        _NORM_DIAS = {
+            'lunes': 'Lunes', 'martes': 'Martes',
+            'miércoles': 'Miércoles', 'miercoles': 'Miércoles',
+            'jueves': 'Jueves', 'viernes': 'Viernes',
+            'sábado': 'Sábado', 'sabado': 'Sábado',
+            'domingo': 'Domingo', 'domingos': 'Domingo',
+            'no aplica': 'Lunes', 'nan': 'Lunes', '': 'Lunes',
+        }
+
+        def _normalizar_dias_cobro(raw):
+            raw = str(raw or '').strip()
+            # Si contiene números o texto inválido (ej: "15 días"), usar Lunes
+            if not raw or raw.lower() in ('nan', 'no aplica', 'no aplica'):
+                return 'Lunes'
+            if any(c.isdigit() for c in raw):
+                return 'Lunes'
+            partes = []
+            for d in raw.split(','):
+                d = d.strip().lower()
+                normalizado = _NORM_DIAS.get(d, d.capitalize())
+                if normalizado and normalizado not in partes:
+                    partes.append(normalizado)
+            return ','.join(partes) if partes else 'Lunes'
+
+        def _limpiar_nro_doc(nro):
+            """Limpia el NRO DOC: quita sufijos de texto como ' REF', ' RE', etc."""
+            nro = str(nro or '').strip()
+            # Separar parte numérica+guion del resto
+            import re
+            m = re.match(r'^([\d\-]+)', nro)
+            return m.group(1).rstrip('-') if m else nro
+
         for _, row in df_docs.iterrows():
-            nro_doc = str(row.get('NRO DOC') or '').strip()
-            if not nro_doc or nro_doc == 'nan':
+            nro_doc_raw = str(row.get('NRO DOC') or '').strip()
+            if not nro_doc_raw or nro_doc_raw == 'nan':
                 continue
+            nro_doc = _limpiar_nro_doc(nro_doc_raw)
             nombre = str(row.get('CLIENTE') or '').strip()
             if not nombre or nombre == 'nan':
                 continue
 
+            # Estado del Excel → estado en BD
+            estado_excel = str(row.get('ESTADO DE PAGO') or '').strip().lower()
+            es_pagado  = 'pagado' in estado_excel
+            es_vencido = 'vencido' in estado_excel
+            bloqueado  = 1 if es_vencido else 0
+
             # ¿Ya existe en la BD?
             existente = conn.execute(
-                "SELECT id FROM solicitudes WHERE cedula=? AND estado='Aprobado'", (nro_doc,)
+                "SELECT id FROM solicitudes WHERE cedula=?", (nro_doc,)
             ).fetchone()
             if existente:
                 nro_a_sid[nro_doc] = existente['id']
@@ -1331,36 +1371,33 @@ def admin_importar():
 
             cod_cliente = str(row.get('COD CLIENTE') or '').strip()
             info = info_cliente.get(cod_cliente, {})
-
-            telefono = info.get('telefono') or 'Sin teléfono'
-            correo = info.get('correo') or ''
-            direccion = str(row.get('UBICACIÓN') or row.get('UBICACION') or '').strip()
+            telefono  = info.get('telefono') or 'Sin teléfono'
+            correo    = info.get('correo') or ''
+            ubicacion = (row.get('UBICACIÓN') or row.get('UBICACION') or
+                         row.get('UBICACI?N') or '')
+            direccion = str(ubicacion).strip()
             direccion = direccion if direccion not in ('nan', '') else 'Sin dirección'
 
-            monto_real = _to_float(row.get('VALOR REAL PRESTADO'))
+            monto_real    = _to_float(row.get('VALOR REAL PRESTADO'))
             total_a_pagar = _to_float(row.get('VALOR A COBRAR'))
             if monto_real <= 0:
                 monto_real = round(total_a_pagar / 1.2, 2)
-            dias = _to_float(row.get('DÍAS DE CRÉDITO') or row.get('DIAS DE CREDITO')) or 42
-            num_cuotas = max(1, round(dias / 7))
-            cuota_estimada = round(total_a_pagar / num_cuotas, 2) if total_a_pagar else 0
+            dias_credito = _to_float(
+                row.get('DÍAS DE CRÉDITO') or row.get('DIAS DE CREDITO') or
+                row.get('D?AS DE CR?DITO') or 0
+            ) or 42
+            num_cuotas      = max(1, round(dias_credito / 7))
+            cuota_estimada  = round(total_a_pagar / num_cuotas, 2) if total_a_pagar else 0
 
-            fecha_raw = row.get('FECHA DE EMISIÓN') or row.get('FECHA DE EMISION')
+            fecha_raw = (row.get('FECHA DE EMISIÓN') or row.get('FECHA DE EMISION') or
+                         row.get('FECHA DE EMISI?N'))
             try:
                 fecha_aprobacion = pd.Timestamp(fecha_raw).strftime('%Y-%m-%d')
             except Exception:
                 fecha_aprobacion = datetime.now().strftime('%Y-%m-%d')
 
-            # Leer días de cobro del Excel
-            dias_raw = str(row.get('Dias de cobro') or row.get('DIAS DE COBRO') or 'Lunes').strip()
-            dias_cobro = dias_raw if dias_raw not in ('nan', '') else 'Lunes'
-            _norm = {'lunes': 'Lunes', 'martes': 'Martes', 'miércoles': 'Miércoles',
-                     'miercoles': 'Miércoles', 'jueves': 'Jueves', 'viernes': 'Viernes',
-                     'sábado': 'Sábado', 'sabado': 'Sábado', 'domingo': 'Domingo',
-                     'domingos': 'Domingo', 'lunes ': 'Lunes', 'martes ': 'Martes'}
-            dias_cobro = ','.join(
-                _norm.get(d.strip().lower(), d.strip().capitalize())
-                for d in dias_cobro.split(',') if d.strip()
+            dias_cobro = _normalizar_dias_cobro(
+                row.get('Dias de cobro') or row.get('DIAS DE COBRO') or ''
             )
 
             ahora = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -1375,21 +1412,39 @@ def admin_importar():
                  0, monto_real, num_cuotas, 'Aprobado', 1,
                  cuota_estimada, total_a_pagar, monto_real, PUNTAJE_INICIAL,
                  generate_password_hash(nro_doc),
-                 fecha_aprobacion, dias_cobro, 0, 0, ahora)
+                 fecha_aprobacion, dias_cobro, bloqueado, 0, ahora)
             )
             conn.commit()
-            nro_a_sid[nro_doc] = cur.lastrowid
+            sid = cur.lastrowid
+            nro_a_sid[nro_doc] = sid
+
+            # Si estaba marcado como Pagado en el Excel, insertar un abono igual al total
+            if es_pagado and total_a_pagar > 0:
+                conn.execute(
+                    "INSERT INTO pagos (solicitud_id, monto, fecha, notas, creado_en) VALUES (?,?,?,?,?)",
+                    (sid, total_a_pagar, fecha_aprobacion, 'Saldado - importado desde Excel', ahora)
+                )
+                conn.commit()
+                pagos_importados += 1
+
             importados += 1
 
         # Importar abonos
         if not df_abonos.empty:
             for _, row in df_abonos.iterrows():
-                nro_doc = str(row.get('NRO DOC') or '').strip()
-                if not nro_doc or nro_doc == 'nan':
+                nro_doc_raw = str(row.get('NRO DOC') or '').strip()
+                if not nro_doc_raw or nro_doc_raw == 'nan':
                     continue
-                # Soportar NRO DOC compuesto como "1033680536-01"
+                nro_doc = _limpiar_nro_doc(nro_doc_raw)
                 base = nro_doc.split('-')[0]
+                # Buscar en los importados; si no está, buscar en BD directamente
                 sid = nro_a_sid.get(nro_doc) or nro_a_sid.get(base)
+                if not sid:
+                    row_bd = conn.execute("SELECT id FROM solicitudes WHERE cedula=?", (nro_doc,)).fetchone()
+                    if not row_bd:
+                        row_bd = conn.execute("SELECT id FROM solicitudes WHERE cedula=?", (base,)).fetchone()
+                    if row_bd:
+                        sid = row_bd['id']
                 if not sid:
                     continue
                 valor = _to_float(row.get('VALOR ABONADO'))
